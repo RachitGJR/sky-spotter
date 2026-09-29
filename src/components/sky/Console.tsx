@@ -752,42 +752,51 @@ function NeoWsInline() {
   );
 }
 
+type Feed = {
+  rows: {
+    name: string;
+    hazardous: boolean;
+    diameterKm: number | null;
+    velocityKph: number | null;
+    missDistanceKm: number | null;
+    approachDate: string | null;
+  }[];
+  tier: "key" | "demo";
+  latencyMs: number;
+  error?: string;
+};
+
 function NeoWsSheet({ onClose }: { onClose: () => void }) {
-  const [state, setState] = useState<{ ok: boolean; text: string; rows: string[] } | null>(null);
+  const getNeoFeed = useAction(api.neows.getNeoFeed);
+  const [feed, setFeed] = useState<Feed | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    const today = new Date();
-    const end = new Date(today.getTime() + 7 * 86_400_000);
-    const fmt = (d: Date) => d.toISOString().slice(0, 10);
-    const url = `https://api.nasa.gov/neo/rest/v1/feed?start_date=${fmt(today)}&end_date=${fmt(end)}&api_key=DEMO_KEY`;
-    fetch(url)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((json: { near_earth_objects?: Record<string, unknown>[] }) => {
-        if (cancelled) return;
-        const rows = (json.near_earth_objects ?? []).map((n: any) => {
-          const v = n.close_approach_data?.[0]?.relative_velocity?.kilometers_per_hour;
-          const miss = n.close_approach_data?.[0]?.miss_distance?.kilometers;
-          return `${String(n.name).replace(/[()]/g, "")} · ${v ? Math.round(v).toLocaleString() : "—"} km/h · miss ${miss ? Math.round(miss).toLocaleString() : "—"} km`;
-        });
-        setState({ ok: true, text: `${rows.length} objects this week`, rows });
+    setLoading(true);
+    getNeoFeed({ days: 7 })
+      .then((r) => {
+        if (!cancelled) setFeed(r as Feed);
       })
       .catch((e: Error) => {
-        if (!cancelled) setState({ ok: false, text: `NeoWs ${e.message}`, rows: [] });
+        if (!cancelled) setFeed({ rows: [], tier: "demo", latencyMs: 0, error: e.message });
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [getNeoFeed]);
 
   return (
     <div className="absolute inset-0 z-30 grid place-items-center bg-[var(--deck-bg)]/80 p-8" onClick={onClose}>
       <div
-        className="deck-scroll max-h-[70vh] w-[min(520px,100%)] overflow-y-auto rounded-lg border border-[var(--deck-line)] p-5"
+        className="deck-scroll max-h-[70vh] w-[min(560px,100%)] overflow-y-auto rounded-lg border border-[var(--deck-line)] p-5"
         style={{ background: "var(--deck-panel)" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-baseline justify-between">
+        <div className="flex items-baseline justify-between gap-4">
           <h2 className="text-[14px] font-medium">Near-Earth object traffic</h2>
           <button onClick={onClose} className="text-[var(--deck-dim)] hover:text-[var(--deck-text)]" aria-label="Close">
             ✕
@@ -797,15 +806,33 @@ function NeoWsSheet({ onClose }: { onClose: () => void }) {
           Objects passing within 1.5 AU of Earth over the next seven days, from NASA&apos;s
           Near-Earth Object Web Service.
         </p>
-        {!state ? (
+
+        {feed && (
+          <p className="mt-3 font-mono text-[10px] text-[var(--deck-dim)]">
+            {feed.tier === "key" ? "personal key" : "anonymous demo tier — rate limited"} · {feed.latencyMs} ms ·{" "}
+            {feed.rows.length} objects
+          </p>
+        )}
+
+        {loading ? (
           <p className="mt-6 font-mono text-[11px] text-[var(--deck-dim)]">contacting NeoWs…</p>
-        ) : state.rows.length === 0 ? (
-          <p className="mt-6 text-[12px] text-[var(--deck-muted)]">{state.text}</p>
+        ) : feed?.error ? (
+          <p className="mt-6 text-[12px] text-[var(--deck-bad)]">{feed.error}</p>
+        ) : feed?.rows.length === 0 ? (
+          <p className="mt-6 text-[12px] text-[var(--deck-muted)]">No approaches this week. Quiet sky.</p>
         ) : (
           <ul className="mt-5 space-y-px overflow-hidden rounded-md border border-[var(--deck-line)]">
-            {state.rows.map((r) => (
-              <li key={r} className="bg-[var(--deck-panel-2)] px-3 py-2 font-mono text-[11px] text-[var(--deck-muted)]">
-                {r}
+            {feed?.rows.map((r) => (
+              <li key={r.name} className="flex items-baseline justify-between gap-3 bg-[var(--deck-panel-2)] px-3 py-2">
+                <span className="min-w-0 truncate text-[12px] text-[var(--deck-text)]">
+                  {r.name}
+                  {r.hazardous && <span className="ml-2 text-[10px] text-[var(--deck-accent)]">hazardous</span>}
+                </span>
+                <span className="shrink-0 font-mono text-[10px] text-[var(--deck-dim)]">
+                  {r.diameterKm !== null ? `${Math.round(r.diameterKm * 1000)} m` : "—"} ·{" "}
+                  {r.velocityKph !== null ? `${Math.round(r.velocityKph).toLocaleString()} km/h` : "—"} ·{" "}
+                  {r.missDistanceKm !== null ? `${Math.round(r.missDistanceKm).toLocaleString()} km` : "—"}
+                </span>
               </li>
             ))}
           </ul>
