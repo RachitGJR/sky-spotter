@@ -295,6 +295,42 @@ export function SkyCanvas({
     ctx.fillText(barDeg >= 1 ? `${barDeg}°` : `${Math.round(barDeg * 60)}′`, 16, size.h - 28);
 
     ctx.font = "11px ui-sans-serif, system-ui, sans-serif";
+    // Outline the detector footprint so the real sky's extent is never ambiguous.
+    if (header && plane) {
+      const [m11, m12, m21, m22] = header.cd;
+      const det = m11 * m22 - m12 * m21;
+      if (det) {
+        const invFactor = plane.width / header.naxis1;
+        const corner = (col: number, row: number) => {
+          const dx = col / invFactor - (header.crpix1 - 1);
+          const dy = row / invFactor - (header.crpix2 - 1);
+          return screenOf(
+            deproject((m22 * dx - m12 * dy) / det, (-m21 * dx + m11 * dy) / det, header.ra, header.dec),
+          );
+        };
+        const tl = corner(0, 0);
+        const tr = corner(plane.width - 1, 0);
+        const br = corner(plane.width - 1, plane.height - 1);
+        const bl = corner(0, plane.height - 1);
+        ctx.save();
+        ctx.strokeStyle = dark ? "rgba(255,255,255,0.22)" : "rgba(17,17,19,0.2)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 5]);
+        ctx.beginPath();
+        ctx.moveTo(tl.x, tl.y);
+        ctx.lineTo(tr.x, tr.y);
+        ctx.lineTo(br.x, br.y);
+        ctx.lineTo(bl.x, bl.y);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.font = "9px ui-monospace, SFMono-Regular, Menlo, monospace";
+        ctx.fillStyle = dark ? "rgba(255,255,255,0.38)" : "rgba(17,17,19,0.35)";
+        ctx.fillText("SPHEREX DETECTOR FOOTPRINT", tl.x + 4, tl.y - 5);
+        ctx.restore();
+      }
+    }
+
     for (const mover of movers) {
       const a = screenOf(mover[epoch === 0 ? "epoch1" : "epoch2"]);
       const b = screenOf(mover[epoch === 0 ? "epoch2" : "epoch1"]);
@@ -358,7 +394,7 @@ export function SkyCanvas({
         ctx.restore();
       }
     }
-  }, [skyVersion, size, settled, tone, epoch, movers, selectedId, showGrid, screenOf]);
+  }, [skyVersion, size, settled, tone, epoch, movers, selectedId, showGrid, screenOf, header, plane]);
 
   const handleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
     if (draggedRef.current) {

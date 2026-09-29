@@ -6,7 +6,14 @@ import { addDays, formatAngle, formatDec, formatRa, project, separation, shortDa
 import { FIELDS, SURVEY_REPEAT_DAYS, getField } from "@/lib/spherex/fields";
 import { apparentMagnitude, motionOf, type Mover } from "@/lib/spherex/movers";
 import { SkyCanvas, type Tone, type View } from "@/components/sky/SkyCanvas";
-import { BAND_COUNT, BAND_WAVELENGTHS, MARKERS, strongestMarker, defaultComposition, modelSpectrum } from "@/components/sky/SpectralScrubber";
+import {
+  BAND_COUNT,
+  BAND_WAVELENGTHS,
+  MARKERS,
+  defaultComposition,
+  modelSpectrum,
+  strongestMarker,
+} from "@/components/sky/SpectralScrubber";
 import {
   AllSkyLocator,
   BeginnerGuide,
@@ -21,30 +28,25 @@ import {
   Aperture,
   Asterisk,
   Crosshair,
-  Eye,
   Grid3x3,
   GraduationCap,
-  Layers,
-  Pause,
   Play,
   RotateCcw,
   Search,
-  Sparkles,
   Volume2,
   VolumeX,
-  Zap,
 } from "lucide-react";
 import "./console.css";
 
 /* ------------------------------------------------------------------ *
- * Small presentational pieces
+ * Presentational pieces — flat, hairline, no fills but the active one
  * ------------------------------------------------------------------ */
 
 function Rail({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <section className="border-b border-[var(--deck-line)] px-4 py-3.5">
-      <div className="mb-2.5 flex items-center justify-between">
-        <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--deck-dim)]">
+    <section className="border-b border-[var(--deck-line-soft)] px-5 py-5">
+      <div className="mb-3.5 flex items-center justify-between">
+        <h2 className="text-[10px] font-medium uppercase tracking-[0.2em] text-[var(--deck-dim)]">
           {title}
         </h2>
         {action}
@@ -54,66 +56,111 @@ function Rail({ title, children, action }: { title: string; children: React.Reac
   );
 }
 
-function Segmented<T extends string>({
+function Option<T extends string>({
   options,
   value,
   onChange,
   columns = 2,
 }: {
-  options: { id: T; label: string }[];
+  options: { id: T; label: string; meta?: string }[];
   value: T;
   onChange: (v: T) => void;
   columns?: number;
 }) {
   return (
-    <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-      {options.map((o) => (
-        <button
-          key={o.id}
-          onClick={() => onChange(o.id)}
-          className={`rounded-md border px-2.5 py-1.5 text-[12px] transition-colors ${
-            value === o.id
-              ? "border-transparent bg-[var(--deck-violet)] text-white"
-              : "border-[var(--deck-line)] text-[var(--deck-muted)] hover:border-[var(--deck-violet)] hover:text-[var(--deck-text)]"
-          }`}
-        >
-          {o.label}
-        </button>
-      ))}
+    <div className="grid gap-px overflow-hidden rounded-md border border-[var(--deck-line)]" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+      {options.map((o) => {
+        const active = o.id === value;
+        return (
+          <button
+            key={o.id}
+            onClick={() => onChange(o.id)}
+            className={`px-2.5 py-2 text-left transition-colors ${
+              active
+                ? "bg-[var(--deck-text)] text-[var(--deck-bg)]"
+                : "bg-transparent text-[var(--deck-muted)] hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
+            }`}
+          >
+            <span className="block text-[12px] leading-tight">{o.label}</span>
+            {o.meta && (
+              <span
+                className={`mt-0.5 block font-mono text-[10px] leading-tight ${
+                  active ? "text-[var(--deck-bg)]/60" : "text-[var(--deck-dim)]"
+                }`}
+              >
+                {o.meta}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function Chip({
+function GhostButton({
   active,
   onClick,
   children,
-  tone = "violet",
+  title,
 }: {
   active?: boolean;
   onClick?: () => void;
   children: React.ReactNode;
-  tone?: "violet" | "cyan" | "amber" | "green";
+  title?: string;
 }) {
-  const colours = {
-    violet: "var(--deck-violet)",
-    cyan: "var(--deck-cyan)",
-    amber: "var(--deck-amber)",
-    green: "var(--deck-green)",
-  }[tone];
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+      title={title}
+      className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-[12px] transition-colors ${
         active
-          ? "border-transparent text-white"
-          : "border-[var(--deck-line)] text-[var(--deck-muted)] hover:text-[var(--deck-text)]"
+          ? "bg-[var(--deck-text)] text-[var(--deck-bg)]"
+          : "text-[var(--deck-muted)] hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
       }`}
-      style={active ? { background: colours } : undefined}
     >
-      <span className="size-1.5 rounded-full" style={{ background: active ? "#fff" : colours }} />
       {children}
     </button>
+  );
+}
+
+function IconButton({
+  onClick,
+  label,
+  children,
+  active,
+}: {
+  onClick: () => void;
+  label: string;
+  children: React.ReactNode;
+  active?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={`grid size-8 shrink-0 place-items-center rounded-md transition-colors ${
+        active
+          ? "bg-[var(--deck-text)] text-[var(--deck-bg)]"
+          : "text-[var(--deck-muted)] hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Readout({ rows }: { rows: [string, string][] }) {
+  return (
+    <dl className="space-y-1.5">
+      {rows.map(([k, v]) => (
+        <div key={k} className="flex items-baseline justify-between gap-3">
+          <dt className="text-[11px] text-[var(--deck-dim)]">{k}</dt>
+          <dd className="font-mono text-[11px] text-[var(--deck-text)]">{v}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -124,7 +171,7 @@ const SPEEDS = [
 ];
 
 const FILTERS: { id: Tone; label: string }[] = [
-  { id: "ink", label: "True colour" },
+  { id: "ink", label: "True" },
   { id: "thermal", label: "Thermal" },
   { id: "paper", label: "Invert" },
 ];
@@ -158,11 +205,15 @@ export default function Console() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [explainerOpen, setExplainerOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
-  const [search, setSearch] = useState("");
   const sound = useSound();
   const { entries, update: updateDiscoveries } = useDiscoveryLog();
 
-  /* --- archive ---------------------------------------------------------- */
+  // The console is a dark instrument; make every shared dialog and sheet follow.
+  useEffect(() => {
+    document.documentElement.classList.add("dark");
+  }, []);
+
+  /* --- the archive ------------------------------------------------------ */
   useEffect(() => {
     const controller = new AbortController();
     let cancelled = false;
@@ -199,7 +250,7 @@ export default function Console() {
   const epoch1 = header ? header.dateObs.slice(0, 10) : "";
   const epoch2 = header ? addDays(epoch1, SURVEY_REPEAT_DAYS) : "";
 
-  /* --- ephemerides ------------------------------------------------------ */
+  /* --- real ephemerides ------------------------------------------------- */
   const designations = useMemo(() => field.members.map((m) => m.designation), [field]);
   const getMovers = useAction(api.movers.getMovers);
   const [movers, setMovers] = useState<Mover[]>([]);
@@ -237,7 +288,6 @@ export default function Console() {
     };
   }, [getMovers, designations, epoch1, epoch2]);
 
-  /* --- blink loop ------------------------------------------------------- */
   useEffect(() => {
     if (!playing) return;
     const id = window.setInterval(() => setEpoch((e) => (e === 0 ? 1 : 0)), intervalMs);
@@ -256,7 +306,6 @@ export default function Console() {
     });
   }, []);
 
-  // Follow mode keeps the selected body parked at the centre while it blinks.
   useEffect(() => {
     if (!follow || !selected) return;
     const p = selected[epoch === 0 ? "epoch1" : "epoch2"];
@@ -296,11 +345,12 @@ export default function Console() {
   const centre = header ?? { ra: view.ra, dec: view.dec };
   const galactic = useMemo(() => {
     const R = Math.PI / 180;
-    const b = Math.asin(
-      Math.sin(centre.dec * R) * Math.sin(27.13 * R) +
-        Math.cos(centre.dec * R) * Math.cos(27.13 * R) * Math.sin((centre.ra - 192.86) * R),
+    return (
+      Math.asin(
+        Math.sin(centre.dec * R) * Math.sin(27.13 * R) +
+          Math.cos(centre.dec * R) * Math.cos(27.13 * R) * Math.sin((centre.ra - 192.86) * R),
+      ) / R
     );
-    return b / R;
   }, [centre.ra, centre.dec]);
 
   const composition = defaultComposition(selected);
@@ -309,171 +359,91 @@ export default function Console() {
   const magnitude = selected ? apparentMagnitude(selected, epoch === 0 ? 1 : 2) : null;
   const lambda = BAND_WAVELENGTHS[band];
 
-  const jumpToMarker = (centreUm: number) => {
-    const i = BAND_WAVELENGTHS.findIndex((l) => l >= centreUm);
-    if (i >= 0) setBand(i);
-  };
-
   return (
-    <div
-      className="flex h-screen flex-col overflow-hidden text-[var(--deck-text)]"
-      style={{ background: "var(--deck-bg)" }}
-    >
+    <div className="flex h-screen flex-col overflow-hidden text-[var(--deck-text)]" style={{ background: "var(--deck-bg)" }}>
       {/* ---------------------------------------------------------- top bar */}
-      <header
-        className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--deck-line)] px-3 py-2"
-        style={{ background: "var(--deck-panel)" }}
-      >
-        <div className="flex items-center gap-2 pr-1">
-          <span className="grid size-7 place-items-center rounded-md bg-[var(--deck-violet)]">
-            <Aperture className="size-4 text-white" />
-          </span>
-          <span className="text-[12px] font-semibold uppercase tracking-[0.16em]">SPHEREx</span>
+      <header className="flex shrink-0 items-center gap-3 border-b border-[var(--deck-line-soft)] px-5 py-2.5">
+        <div className="flex shrink-0 items-baseline gap-2.5">
+          <Aperture className="size-4 translate-y-0.5 text-[var(--deck-accent)]" />
+          <span className="text-[12px] font-semibold uppercase tracking-[0.22em]">SPHEREx</span>
+          <span className="text-[12px] text-[var(--deck-dim)]">Blink Comparator</span>
         </div>
 
-        <div className="flex items-center gap-2 rounded-full border border-[var(--deck-line)] px-2.5 py-1">
-          <span className="size-1.5 rounded-full bg-[var(--deck-cyan)]" />
-          <span className="max-w-[190px] truncate text-[12px]">
-            {selected ? selected.name : field.name}
-          </span>
-          <span className="font-mono text-[10px] text-[var(--deck-dim)]">
-            S{epoch === 0 ? "1" : "2"} · Band {band + 1} ({lambda.toFixed(2)} µm)
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1">
-          {[
-            { id: "blink", label: "Blink", icon: <Zap className="size-3" />, on: playing, act: () => setPlaying((p) => !p) },
-            { id: "freeze", label: epoch === 0 ? "Epoch A" : "Epoch B", icon: <Pause className="size-3" />, on: !playing, act: () => setPlaying(false) },
-            { id: "follow", label: "Follow", icon: <Crosshair className="size-3" />, on: follow, act: () => setFollow((f) => !f) },
-          ].map((c) => (
-            <button
-              key={c.id}
-              onClick={c.act}
-              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
-                c.on
-                  ? "border-transparent bg-[var(--deck-violet)] text-white"
-                  : "border-[var(--deck-line)] text-[var(--deck-muted)] hover:text-[var(--deck-text)]"
-              }`}
-            >
-              {c.icon}
-              {c.label}
-            </button>
+        <div className="hidden min-w-0 flex-1 items-center gap-1 lg:flex">
+          <span className="h-4 w-px shrink-0 bg-[var(--deck-line)]" />
+          {FIELDS.map((f) => (
+            <GhostButton key={f.id} active={f.id === fieldId} onClick={() => setFieldId(f.id)}>
+              {f.name}
+            </GhostButton>
           ))}
         </div>
 
-        <label className="flex min-w-[150px] flex-1 items-center gap-2 rounded-full border border-[var(--deck-line)] px-3 py-1">
-          <Search className="size-3 text-[var(--deck-dim)]" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search bodies, fields, bands…"
-            className="w-full bg-transparent text-[12px] outline-none placeholder:text-[var(--deck-dim)]"
-          />
-        </label>
-
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <TopButton tone="violet" onClick={() => { setTourStep(0); setTourOpen(true); }} icon={<GraduationCap className="size-3.5" />}>
-            In-app demo
-          </TopButton>
-          <TopButton tone="amber" onClick={() => setExplainerOpen(true)} icon={<Layers className="size-3.5" />}>
-            Video guide
-          </TopButton>
-          <TopButton tone="cyan" onClick={() => setGuideOpen(true)} icon={<Sparkles className="size-3.5" />}>
-            Guide: {sound.on ? "sound" : "on"}
-          </TopButton>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <GhostButton onClick={() => { setTourStep(0); setTourOpen(true); }} title="Guided walkthrough">
+            <GraduationCap className="mr-1.5 inline size-3.5" />
+            Tour
+          </GhostButton>
+          <GhostButton onClick={() => setGuideOpen(true)} title="Plain-English guide">
+            What am I seeing?
+          </GhostButton>
+          <GhostButton onClick={() => setExplainerOpen(true)}>Explainer</GhostButton>
+          <NeoWsInline />
           <DiscoveryLog entries={entries} onChange={updateDiscoveries} />
-          <button
+          <GhostButton
             onClick={() => setLogOpen(true)}
-            disabled={!selected}
-            className="flex items-center gap-1.5 rounded-full bg-[var(--deck-violet)] px-3 py-1 text-[11px] text-white disabled:opacity-40"
+            title={selected ? `Mark ${selected.name}` : "Select a body first"}
           >
-            <Asterisk className="size-3.5" />
+            <Asterisk className="mr-1.5 inline size-3.5 text-[var(--deck-accent)]" />
             Mark
-          </button>
-          <button
-            onClick={() => sound.setOn(!sound.on)}
-            className="grid size-7 place-items-center rounded-full border border-[var(--deck-line)] text-[var(--deck-muted)] hover:text-[var(--deck-text)]"
-            aria-label="Toggle sound"
-          >
+          </GhostButton>
+          <span className="mx-1 h-4 w-px bg-[var(--deck-line)]" />
+          <IconButton onClick={() => sound.setOn(!sound.on)} label="Toggle sound">
             {sound.on ? <Volume2 className="size-3.5" /> : <VolumeX className="size-3.5" />}
-          </button>
+          </IconButton>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
         {/* ------------------------------------------------------ left rail */}
-        <aside
-          className="deck-scroll w-[300px] shrink-0 overflow-y-auto border-r border-[var(--deck-line)]"
-          style={{ background: "var(--deck-panel)" }}
-        >
-          <div className="space-y-0 p-3">
-            <button
-              onClick={() => setGuideOpen(true)}
-              className="mb-2 flex w-full items-center gap-2 rounded-md border border-[var(--deck-line)] px-3 py-2 text-left text-[12px] text-[var(--deck-muted)] hover:border-[var(--deck-violet)] hover:text-[var(--deck-text)]"
-            >
-              <GraduationCap className="size-3.5" />
-              Kid &amp; beginner guide
-            </button>
-            <div className="mb-3 flex items-center justify-between rounded-md bg-[var(--deck-raised)] px-3 py-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--deck-cyan)]">
-                Deep sky
-              </span>
-              <span className="text-[10px] text-[var(--deck-dim)]">moving-object mode</span>
-            </div>
+        <aside className="deck-scroll w-[286px] shrink-0 overflow-y-auto border-r border-[var(--deck-line-soft)]" style={{ background: "var(--deck-panel)" }}>
+          <div className="px-5 py-5">
+            <p className="text-[15px] leading-snug text-[var(--deck-text)]">
+              Find what moves while the stars hold still.
+            </p>
+            <p className="mt-2.5 text-[12px] leading-relaxed text-[var(--deck-dim)]">{field.blurb}</p>
           </div>
 
-          <Rail
-            title="Target field"
-            action={
-              <button
-                onClick={() => setView({ ra: field.fallbackRa, dec: field.fallbackDec, fovDeg: 3.15 })}
-                className="text-[10px] text-[var(--deck-violet)] hover:underline"
-              >
-                reset
-              </button>
-            }
-          >
-            <div className="space-y-1">
+          <Rail title="Target field">
+            <div className="mb-4 space-y-px overflow-hidden rounded-md border border-[var(--deck-line)]">
               {FIELDS.map((f) => (
                 <button
                   key={f.id}
                   onClick={() => setFieldId(f.id)}
-                  className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
+                  className={`flex w-full items-baseline justify-between gap-2 px-3 py-2 text-left transition-colors ${
                     f.id === fieldId
-                      ? "border-[var(--deck-violet)] bg-[var(--deck-raised)]"
-                      : "border-transparent hover:border-[var(--deck-line)]"
+                      ? "bg-[var(--deck-raised)] text-[var(--deck-text)]"
+                      : "text-[var(--deck-muted)] hover:bg-[var(--deck-raised)]/60"
                   }`}
                 >
-                  <div className="text-[12px]">{f.name}</div>
-                  <div className="mt-0.5 font-mono text-[10px] text-[var(--deck-dim)]">
-                    {f.members.map((m) => m.designation).join(", ")}
-                  </div>
+                  <span className="truncate text-[12px]">{f.name}</span>
+                  <span className="shrink-0 font-mono text-[10px] text-[var(--deck-dim)]">
+                    {f.members[0]?.designation}
+                  </span>
                 </button>
               ))}
             </div>
-            <dl className="mt-3 space-y-1 font-mono text-[10px] text-[var(--deck-dim)]">
-              <div className="flex justify-between gap-2">
-                <dt>α</dt>
-                <dd className="text-[var(--deck-cyan)]">{formatRa(centre.ra)}</dd>
-              </div>
-              <div className="flex justify-between gap-2">
-                <dt>δ</dt>
-                <dd className="text-[var(--deck-cyan)]">{formatDec(centre.dec)}</dd>
-              </div>
-              <div className="flex justify-between gap-2">
-                <dt>b</dt>
-                <dd className="text-[var(--deck-cyan)]">{galactic.toFixed(1)}°</dd>
-              </div>
-              <div className="flex justify-between gap-2">
-                <dt>FOV</dt>
-                <dd className="text-[var(--deck-cyan)]">{view.fovDeg.toFixed(2)}°</dd>
-              </div>
-            </dl>
+            <Readout
+              rows={[
+                ["α", formatRa(centre.ra)],
+                ["δ", formatDec(centre.dec)],
+                ["galactic b", `${galactic.toFixed(1)}°`],
+                ["field of view", `${view.fovDeg.toFixed(2)}°`],
+              ]}
+            />
           </Rail>
 
           <Rail title="Observation mode">
-            <Segmented
+            <Option
               options={[
                 { id: "blink", label: "Blink" },
                 { id: "freeze", label: "Freeze" },
@@ -481,7 +451,10 @@ export default function Console() {
               ]}
               value={playing ? "blink" : follow ? "follow" : "freeze"}
               onChange={(v) => {
-                if (v === "blink") setPlaying(true);
+                if (v === "blink") {
+                  setPlaying(true);
+                  setFollow(false);
+                }
                 if (v === "freeze") {
                   setPlaying(false);
                   setFollow(false);
@@ -495,80 +468,58 @@ export default function Console() {
           </Rail>
 
           <Rail title="Survey epoch">
-            <div className="grid grid-cols-2 gap-1">
-              {[0, 1].map((e) => (
-                <button
-                  key={e}
-                  onClick={() => {
-                    setEpoch(e as 0 | 1);
-                    setPlaying(false);
-                  }}
-                  className={`rounded-md border px-3 py-2 text-left transition-colors ${
-                    epoch === e
-                      ? "border-transparent bg-[var(--deck-violet)] text-white"
-                      : "border-[var(--deck-line)] hover:border-[var(--deck-violet)]"
-                  }`}
-                >
-                  <div className="text-[12px] font-semibold">{e === 0 ? "S1" : "S2"}</div>
-                  <div className={`font-mono text-[10px] ${epoch === e ? "text-white/80" : "text-[var(--deck-dim)]"}`}>
-                    {shortDate(e === 0 ? epoch1 : epoch2)}
-                  </div>
-                </button>
-              ))}
-            </div>
+            <Option
+              options={[
+                { id: "a", label: "Epoch A", meta: shortDate(epoch1) },
+                { id: "b", label: "Epoch B", meta: shortDate(epoch2) },
+              ]}
+              value={epoch === 0 ? "a" : "b"}
+              onChange={(v) => {
+                setEpoch(v === "a" ? 0 : 1);
+                setPlaying(false);
+              }}
+            />
           </Rail>
 
-          <Rail title="Blink speed">
-            <div className="grid grid-cols-3 gap-1">
-              {SPEEDS.map((s) => (
-                <button
-                  key={s.label}
-                  onClick={() => setIntervalMs(s.ms)}
-                  className={`rounded-md border px-2 py-1.5 text-[11px] transition-colors ${
-                    intervalMs === s.ms
-                      ? "border-[var(--deck-violet)] bg-[var(--deck-raised)] text-[var(--deck-text)]"
-                      : "border-[var(--deck-line)] text-[var(--deck-muted)] hover:text-[var(--deck-text)]"
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-            <div className="mt-3 flex items-center gap-2">
-              <span className="font-mono text-[10px] text-[var(--deck-dim)]">fast</span>
-              <input
-                type="range"
-                min={150}
-                max={2000}
-                step={50}
-                value={intervalMs}
-                onChange={(e) => setIntervalMs(Number(e.target.value))}
-                className="h-1 flex-1 accent-[var(--deck-violet)]"
-              />
-              <span className="font-mono text-[10px] text-[var(--deck-dim)]">slow</span>
-            </div>
-            <p className="mt-1 text-right font-mono text-[10px] text-[var(--deck-violet)]">
-              {(intervalMs / 1000).toFixed(2)}s / epoch
-            </p>
+          <Rail title="Blink speed" action={<span className="font-mono text-[10px] text-[var(--deck-dim)]">{(intervalMs / 1000).toFixed(2)}s / epoch</span>}>
+            <Option
+              options={SPEEDS.map((s) => ({ id: String(s.ms), label: s.label }))}
+              value={String(intervalMs)}
+              onChange={(v) => setIntervalMs(Number(v))}
+              columns={3}
+            />
+            <input
+              type="range"
+              min={150}
+              max={2000}
+              step={50}
+              value={intervalMs}
+              onChange={(e) => setIntervalMs(Number(e.target.value))}
+              className="deck-range mt-4 w-full"
+              aria-label="Blink interval"
+            />
           </Rail>
 
           <Rail title="Display">
-            <div className="flex flex-wrap gap-1">
-              {FILTERS.map((f) => (
-                <Chip key={f.id} active={tone === f.id} onClick={() => setTone(f.id)} tone="cyan">
-                  {f.label}
-                </Chip>
-              ))}
-              <Chip active={showGrid} onClick={() => setShowGrid((g) => !g)} tone="green">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Option
+                options={FILTERS.map((f) => ({ id: f.id, label: f.label }))}
+                value={tone}
+                onChange={setTone}
+                columns={3}
+              />
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <GhostButton active={showGrid} onClick={() => setShowGrid((g) => !g)}>
                 Grid
-              </Chip>
-              <Chip active={onlyInFrame} onClick={() => setOnlyInFrame((v) => !v)} tone="amber">
-                In frame
-              </Chip>
+              </GhostButton>
+              <GhostButton active={onlyInFrame} onClick={() => setOnlyInFrame((v) => !v)}>
+                In frame only
+              </GhostButton>
             </div>
           </Rail>
 
-          <Rail title="Sky context">
+          <Rail title="Where this is">
             <AllSkyLocator ra={centre.ra} dec={centre.dec} />
           </Rail>
         </aside>
@@ -582,8 +533,8 @@ export default function Console() {
             tone={tone}
             epoch={epoch}
             epochLabels={[
-              `S1 · ${shortDate(epoch1)}`,
-              `S2 · ${shortDate(epoch2)} · +${SURVEY_REPEAT_DAYS} d`,
+              `EPOCH A · ${shortDate(epoch1)}`,
+              `EPOCH B · ${shortDate(epoch2)} · +${SURVEY_REPEAT_DAYS} d`,
             ]}
             movers={visible}
             selectedId={selectedId}
@@ -593,181 +544,101 @@ export default function Console() {
             busy={status === "header" || status === "plane"}
           />
 
-          {/* aperture frame */}
-          <div className="pointer-events-none absolute inset-[14%] hidden sm:block">
-            <div className="relative size-full">
-              {[
-                "left-0 top-0 border-l-2 border-t-2",
-                "right-0 top-0 border-r-2 border-t-2",
-                "left-0 bottom-0 border-l-2 border-b-2",
-                "right-0 bottom-0 border-r-2 border-b-2",
-              ].map((c) => (
-                <span
-                  key={c}
-                  className={`absolute size-5 border-[var(--deck-text)]/45 ${c}`}
-                />
-              ))}
-              <span className="absolute -top-5 left-0 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--deck-dim)]">
-                Aperture
-              </span>
-            </div>
+          <div className="pointer-events-none absolute left-5 top-5 font-mono text-[10px] text-[var(--deck-dim)]">
+            <p>α {formatRa(centre.ra)}</p>
+            <p className="mt-0.5">δ {formatDec(centre.dec)}</p>
+            <p className="mt-0.5">FOV {view.fovDeg.toFixed(2)}° · PSF {header ? header.psfFwhmArcsec.toFixed(1) : "—"}″</p>
           </div>
 
-          {/* field readout */}
-          <div className="pointer-events-none absolute left-4 top-4 flex flex-wrap items-center gap-2 font-mono text-[10px]">
-            <span className="rounded-md border border-[var(--deck-line)] bg-black/50 px-2 py-1 text-[var(--deck-muted)] backdrop-blur-sm">
-              α {formatRa(centre.ra)}
-            </span>
-            <span className="rounded-md border border-[var(--deck-line)] bg-black/50 px-2 py-1 text-[var(--deck-muted)] backdrop-blur-sm">
-              δ {formatDec(centre.dec)}
-            </span>
-            <span className="rounded-md border border-[var(--deck-line)] bg-black/50 px-2 py-1 text-[var(--deck-muted)] backdrop-blur-sm">
-              FOV {view.fovDeg.toFixed(2)}°
-            </span>
-            <span className="rounded-md border border-[var(--deck-line)] bg-black/50 px-2 py-1 text-[var(--deck-muted)] backdrop-blur-sm">
-              PSF {header ? header.psfFwhmArcsec.toFixed(1) : "—"}″
-            </span>
+          <div className="pointer-events-none absolute right-5 top-5 text-right font-mono text-[10px]">
+            <p className="text-[var(--deck-ok)]">
+              archive · {status === "ready" ? "live" : status}
+            </p>
+            <p className="mt-0.5 text-[var(--deck-dim)]">{header ? header.obsid : "—"}</p>
+            {moversError && <p className="mt-0.5 text-[var(--deck-bad)]">horizons · error</p>}
           </div>
 
-          {/* zoom cluster */}
-          <div className="absolute left-4 top-1/2 flex -translate-y-1/2 flex-col gap-1 rounded-lg border border-[var(--deck-line)] bg-black/45 p-1 backdrop-blur-sm">
-            {[
-              { icon: <Crosshair className="size-4" />, act: () => setView((v) => ({ ...v, fovDeg: Math.max(0.15, v.fovDeg / 1.4) })) },
-              { icon: <Search className="size-4" />, act: () => setView((v) => ({ ...v, fovDeg: Math.min(8, v.fovDeg * 1.4) })) },
-            ].map((b, i) => (
-              <button
-                key={i}
-                onClick={b.act}
-                className="grid size-8 place-items-center rounded-md text-[var(--deck-muted)] hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
-              >
-                {b.icon}
-              </button>
-            ))}
-            <button
+          <div className="absolute bottom-5 left-5 flex flex-col gap-px overflow-hidden rounded-md border border-[var(--deck-line)]">
+            <IconButton onClick={() => setView((v) => ({ ...v, fovDeg: Math.max(0.15, v.fovDeg / 1.4) }))} label="Zoom in">
+              +
+            </IconButton>
+            <IconButton onClick={() => setView((v) => ({ ...v, fovDeg: Math.min(8, v.fovDeg * 1.4) }))} label="Zoom out">
+              −
+            </IconButton>
+            <IconButton
               onClick={() => setPlaying((p) => !p)}
-              className="grid size-8 place-items-center rounded-md bg-[var(--deck-violet)] text-white"
-              aria-label={playing ? "Pause" : "Play"}
+              label={playing ? "Pause" : "Play"}
+              active
             >
-              {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
-            </button>
-            <button
-              onClick={() => setShowGrid((g) => !g)}
-              className="grid size-8 place-items-center rounded-md text-[var(--deck-muted)] hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
-              aria-label="Grid"
-            >
-              <Grid3x3 className="size-4" />
-            </button>
-            <button
+              <Play className="size-3.5" />
+            </IconButton>
+            <IconButton onClick={() => setShowGrid((g) => !g)} label="Grid" active={showGrid}>
+              <Grid3x3 className="size-3.5" />
+            </IconButton>
+            <IconButton
               onClick={() => header && setView({ ra: header.ra, dec: header.dec, fovDeg: 3.15 })}
-              className="grid size-8 place-items-center rounded-md text-[var(--deck-muted)] hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
-              aria-label="Reset"
+              label="Reset view"
             >
-              <RotateCcw className="size-4" />
-            </button>
-            <button
-              onClick={() => tone === "ink" ? setTone("thermal") : setTone("ink")}
-              className="grid size-8 place-items-center rounded-md text-[var(--deck-muted)] hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
-              aria-label="Toggle false colour"
+              <RotateCcw className="size-3.5" />
+            </IconButton>
+            <IconButton
+              onClick={() => setView({ ra: centre.ra, dec: centre.dec, fovDeg: view.fovDeg })}
+              label="Centre on field"
             >
-              <Eye className="size-4" />
-            </button>
-          </div>
-
-          {/* survey status */}
-          <div className="absolute right-4 top-4 flex items-center gap-2 font-mono text-[10px]">
-            <span className="rounded-full border border-[var(--deck-green)]/40 bg-black/50 px-2.5 py-1 text-[var(--deck-green)] backdrop-blur-sm">
-              ARCHIVE {status === "ready" ? "live" : status}
-            </span>
-            <span className="rounded-full border border-[var(--deck-line)] bg-black/50 px-2.5 py-1 text-[var(--deck-muted)] backdrop-blur-sm">
-              PHOTO {header ? header.obsid.slice(-9) : "—"}
-            </span>
-            {moversError && (
-              <span className="rounded-full border border-[var(--deck-red)]/40 bg-black/50 px-2.5 py-1 text-[var(--deck-red)] backdrop-blur-sm">
-                HORIZONS ERROR
-              </span>
-            )}
-          </div>
-
-          {/* RA / Dec ruler down the right edge */}
-          <div className="pointer-events-none absolute bottom-20 right-2 top-16 hidden w-24 flex-col justify-between font-mono text-[9px] text-[var(--deck-dim)] lg:flex">
-            {Array.from({ length: 9 }, (_, i) => {
-              const dec = centre.dec + (4 - i) * (view.fovDeg / 8);
-              return (
-                <span key={i} className="flex items-center gap-1">
-                  <span className="h-px w-2 bg-[var(--deck-line)]" />
-                  {formatDec(dec).slice(0, 9)}
-                </span>
-              );
-            })}
+              <Crosshair className="size-3.5" />
+            </IconButton>
           </div>
 
           {status === "error" && (
-            <div className="absolute inset-0 grid place-items-center bg-black/70 p-8 text-center">
+            <div className="absolute inset-0 grid place-items-center bg-[var(--deck-bg)]/90 p-8 text-center">
               <div className="max-w-sm space-y-2">
-                <p className="text-sm font-medium">The SPHEREx archive did not respond.</p>
-                <p className="text-xs text-[var(--deck-muted)]">{error}</p>
+                <p className="text-sm">The SPHEREx archive did not respond.</p>
+                <p className="text-xs text-[var(--deck-dim)]">{error}</p>
               </div>
             </div>
           )}
 
-          {/* target card */}
+          {status !== "ready" && status !== "error" && (
+            <div className="pointer-events-none absolute inset-0 grid place-items-center">
+              <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--deck-dim)]">
+                {status === "header" ? "reading archive header" : "reading 16 MB of sky"}
+              </p>
+            </div>
+          )}
+
           {selected && motion && (
-            <div className="absolute bottom-4 left-1/2 w-[min(560px,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-[var(--deck-line)] bg-[var(--deck-panel)]/95 p-4 shadow-2xl backdrop-blur-md">
+            <div className="absolute bottom-5 left-1/2 w-[min(540px,calc(100%-2.5rem))] -translate-x-1/2 rounded-lg border border-[var(--deck-line)] p-4" style={{ background: "var(--deck-panel)" }}>
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h3 className="truncate text-[15px] font-semibold">{selected.name}</h3>
-                  <p className="mt-1 text-[12px] leading-relaxed text-[var(--deck-muted)]">
+                  <h3 className="truncate text-[14px] font-medium">{selected.name}</h3>
+                  <p className="mt-1 text-[12px] text-[var(--deck-muted)]">
                     {selected.class ?? "solar system body"}
                     {selected.diameterKm
                       ? ` · ${selected.diameterKm > 1 ? `${selected.diameterKm.toFixed(0)} km` : `${Math.round(selected.diameterKm * 1000)} m`} across`
                       : ""}
-                    . Crosses this field between the two survey epochs.
                   </p>
                 </div>
-                <button
-                  onClick={() => setSelectedId(null)}
-                  className="text-[var(--deck-dim)] hover:text-[var(--deck-text)]"
-                  aria-label="Close"
-                >
+                <button onClick={() => setSelectedId(null)} className="text-[var(--deck-dim)] hover:text-[var(--deck-text)]" aria-label="Close">
                   ✕
                 </button>
               </div>
 
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                <CardStat
-                  label="Coordinates"
-                  value={`${formatRa(here(selected, epoch).ra).slice(0, 8)} ${formatDec(here(selected, epoch).dec).slice(0, 9)}`}
-                />
-                <CardStat label="Magnitude" value={magnitude !== null ? `${magnitude.toFixed(2)} mag` : "—"} />
-                <CardStat
-                  label="Motion signature"
-                  value={`${formatAngle(motion.separationDeg)} · ${motion.positionAngle.toFixed(0)}°`}
-                  tone="amber"
-                />
+              <div className="mt-3.5 grid grid-cols-3 gap-px overflow-hidden rounded-md border border-[var(--deck-line)]">
+                <Stat label="Coordinates" value={`${formatRa(here(selected, epoch).ra).slice(0, 8)} ${formatDec(here(selected, epoch).dec).slice(0, 9)}`} />
+                <Stat label="Magnitude" value={magnitude !== null ? `${magnitude.toFixed(2)} mag` : "—"} />
+                <Stat label="Motion" value={`${formatAngle(motion.separationDeg)}`} accent />
               </div>
 
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => focusMover(selected)}
-                  className="rounded-full border border-[var(--deck-line)] px-3 py-1 text-[11px] text-[var(--deck-muted)] hover:border-[var(--deck-violet)] hover:text-[var(--deck-text)]"
-                >
-                  Frame both epochs
-                </button>
-                <button
-                  onClick={() => setFollow((f) => !f)}
-                  className={`rounded-full px-3 py-1 text-[11px] ${
-                    follow
-                      ? "bg-[var(--deck-cyan)] text-black"
-                      : "border border-[var(--deck-line)] text-[var(--deck-muted)] hover:text-[var(--deck-text)]"
-                  }`}
-                >
-                  {follow ? "Following" : "Follow while blinking"}
-                </button>
+              <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
+                <GhostButton onClick={() => focusMover(selected)}>Frame both epochs</GhostButton>
+                <GhostButton active={follow} onClick={() => setFollow((f) => !f)}>
+                  Follow while blinking
+                </GhostButton>
                 <button
                   onClick={() => setLogOpen(true)}
-                  className="ml-auto rounded-full bg-[var(--deck-violet)] px-3 py-1 text-[11px] text-white"
+                  className="ml-auto rounded-md bg-[var(--deck-text)] px-3 py-1.5 text-[12px] text-[var(--deck-bg)] transition-opacity hover:opacity-85"
                 >
-                  + Mark candidate
+                  Mark candidate
                 </button>
               </div>
             </div>
@@ -776,62 +647,45 @@ export default function Console() {
       </div>
 
       {/* ------------------------------------------------------ bottom bar */}
-      <footer
-        className="flex shrink-0 flex-wrap items-center gap-4 border-t border-[var(--deck-line)] px-4 py-2.5"
-        style={{ background: "var(--deck-panel)" }}
-      >
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => setBand((b) => Math.max(0, b - 1))}
-            className="grid size-6 place-items-center rounded text-[var(--deck-muted)] hover:text-[var(--deck-text)]"
-          >
-            ‹
-          </button>
-          <button
-            onClick={() => setBand((b) => Math.min(BAND_COUNT - 1, b + 1))}
-            className="grid size-6 place-items-center rounded text-[var(--deck-muted)] hover:text-[var(--deck-text)]"
-          >
-            ›
-          </button>
-        </div>
-
-        <div className="min-w-[150px]">
-          <p className="text-[12px] font-semibold text-[var(--deck-violet)]">
-            Band {band + 1} · {lambda.toFixed(2)} µm
+      <footer className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-3 border-t border-[var(--deck-line-soft)] px-5 py-3">
+        <div className="min-w-[128px]">
+          <p className="text-[12px] font-medium">
+            Band {band + 1} <span className="text-[var(--deck-dim)]">· {lambda.toFixed(2)} µm</span>
           </p>
-          <p className="font-mono text-[10px] text-[var(--deck-dim)]">
-            flux {curve[band].toFixed(3)} · {SURVEY_REPEAT_DAYS} spectral channels
+          <p className="mt-0.5 font-mono text-[10px] text-[var(--deck-dim)]">
+            flux {curve[band].toFixed(3)} · {BAND_COUNT} channels
           </p>
         </div>
 
-        <input
-          type="range"
-          min={0}
-          max={BAND_COUNT - 1}
-          value={band}
-          onChange={(e) => setBand(Number(e.target.value))}
-          className="h-1 min-w-[200px] flex-1 accent-[var(--deck-violet)]"
-          aria-label="Spectral band"
-        />
+        <div className="flex min-w-[220px] flex-1 items-center gap-2">
+          <input
+            type="range"
+            min={0}
+            max={BAND_COUNT - 1}
+            value={band}
+            onChange={(e) => setBand(Number(e.target.value))}
+            className="deck-range flex-1"
+            aria-label="Spectral band"
+          />
+        </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
           {MARKERS.slice(0, 4).map((m) => (
             <button
               key={m.name}
-              onClick={() => jumpToMarker(m.centre)}
-              className="flex items-center gap-1.5 rounded-full border border-[var(--deck-line)] px-2.5 py-1 text-[11px] text-[var(--deck-muted)] transition-colors hover:border-[var(--deck-cyan)] hover:text-[var(--deck-text)]"
+              onClick={() => {
+                const i = BAND_WAVELENGTHS.findIndex((l) => l >= m.centre);
+                if (i >= 0) setBand(i);
+              }}
+              className="rounded-md px-2 py-1 text-[11px] text-[var(--deck-muted)] transition-colors hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
             >
-              <span
-                className="size-2 rounded-sm"
-                style={{ background: bandColour(m.centre) }}
-              />
               {m.name}
             </button>
           ))}
         </div>
 
         <p className="ml-auto font-mono text-[10px] text-[var(--deck-dim)]">
-          {composition === "ice" ? "Volatile ice" : composition === "gas" ? "Gas giant" : "Silicate rock"} ·
+          {composition === "ice" ? "volatile ice" : composition === "gas" ? "gas giant" : "silicate rock"} ·
           strongest {marker.name} · SPHEREx QR2 · JPL Horizons
         </p>
       </footer>
@@ -855,42 +709,11 @@ export default function Console() {
   );
 }
 
-function TopButton({
-  tone,
-  onClick,
-  icon,
-  children,
-}: {
-  tone: "violet" | "amber" | "cyan";
-  onClick: () => void;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  const accent = {
-    violet: "var(--deck-violet)",
-    amber: "var(--deck-amber)",
-    cyan: "var(--deck-cyan)",
-  }[tone];
+function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-opacity hover:opacity-80"
-      style={{ borderColor: `${accent}66`, color: accent }}
-    >
-      {icon}
-      {children}
-    </button>
-  );
-}
-
-function CardStat({ label, value, tone }: { label: string; value: string; tone?: "amber" }) {
-  return (
-    <div className="rounded-lg bg-[var(--deck-raised)] px-3 py-2">
+    <div className="bg-[var(--deck-panel-2)] px-3 py-2">
       <p className="text-[9px] uppercase tracking-[0.16em] text-[var(--deck-dim)]">{label}</p>
-      <p
-        className="mt-0.5 font-mono text-[11px]"
-        style={{ color: tone === "amber" ? "var(--deck-amber)" : "var(--deck-text)" }}
-      >
+      <p className={`mt-0.5 font-mono text-[11px] ${accent ? "text-[var(--deck-accent)]" : "text-[var(--deck-text)]"}`}>
         {value}
       </p>
     </div>
@@ -901,9 +724,79 @@ function here(m: Mover, epoch: 0 | 1) {
   return m[epoch === 0 ? "epoch1" : "epoch2"];
 }
 
-function bandColour(centre: number) {
-  if (centre < 2.2) return "var(--deck-cyan)";
-  if (centre < 3.4) return "var(--deck-violet)";
-  if (centre < 4.2) return "var(--deck-amber)";
-  return "var(--deck-green)";
+/** Live NEO feed, collapsed to a single quiet status pill in the top bar. */
+function NeoWsInline() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <GhostButton onClick={() => setOpen(true)} title="Near-Earth object traffic">
+        <Search className="mr-1.5 inline size-3.5" />
+        NEO traffic
+      </GhostButton>
+      {open && <NeoWsSheet onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function NeoWsSheet({ onClose }: { onClose: () => void }) {
+  const [state, setState] = useState<{ ok: boolean; text: string; rows: string[] } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const today = new Date();
+    const end = new Date(today.getTime() + 7 * 86_400_000);
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    const url = `https://api.nasa.gov/neo/rest/v1/feed?start_date=${fmt(today)}&end_date=${fmt(end)}&api_key=DEMO_KEY`;
+    fetch(url)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((json: { near_earth_objects?: Record<string, unknown>[] }) => {
+        if (cancelled) return;
+        const rows = (json.near_earth_objects ?? []).map((n: any) => {
+          const v = n.close_approach_data?.[0]?.relative_velocity?.kilometers_per_hour;
+          const miss = n.close_approach_data?.[0]?.miss_distance?.kilometers;
+          return `${String(n.name).replace(/[()]/g, "")} · ${v ? Math.round(v).toLocaleString() : "—"} km/h · miss ${miss ? Math.round(miss).toLocaleString() : "—"} km`;
+        });
+        setState({ ok: true, text: `${rows.length} objects this week`, rows });
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setState({ ok: false, text: `NeoWs ${e.message}`, rows: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <div className="absolute inset-0 z-30 grid place-items-center bg-[var(--deck-bg)]/80 p-8" onClick={onClose}>
+      <div
+        className="deck-scroll max-h-[70vh] w-[min(520px,100%)] overflow-y-auto rounded-lg border border-[var(--deck-line)] p-5"
+        style={{ background: "var(--deck-panel)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-[14px] font-medium">Near-Earth object traffic</h2>
+          <button onClick={onClose} className="text-[var(--deck-dim)] hover:text-[var(--deck-text)]" aria-label="Close">
+            ✕
+          </button>
+        </div>
+        <p className="mt-1.5 text-[12px] text-[var(--deck-dim)]">
+          Objects passing within 1.5 AU of Earth over the next seven days, from NASA&apos;s
+          Near-Earth Object Web Service.
+        </p>
+        {!state ? (
+          <p className="mt-6 font-mono text-[11px] text-[var(--deck-dim)]">contacting NeoWs…</p>
+        ) : state.rows.length === 0 ? (
+          <p className="mt-6 text-[12px] text-[var(--deck-muted)]">{state.text}</p>
+        ) : (
+          <ul className="mt-5 space-y-px overflow-hidden rounded-md border border-[var(--deck-line)]">
+            {state.rows.map((r) => (
+              <li key={r} className="bg-[var(--deck-panel-2)] px-3 py-2 font-mono text-[11px] text-[var(--deck-muted)]">
+                {r}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
 }
