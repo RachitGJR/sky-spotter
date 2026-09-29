@@ -106,7 +106,7 @@ export async function readHeader(field: SkyField, signal?: AbortSignal): Promise
   throw new Error("No IMAGE extension found in the SPHEREx product.");
 }
 
-/** Reads the calibrated image plane and boxes it down to roughly `target` pixels. */
+/** Reads the calibrated image plane and pools it down to roughly `target` pixels. */
 export async function readPlane(
   header: SpherexHeader,
   target = 510,
@@ -122,26 +122,26 @@ export async function readPlane(
   const height = Math.floor(naxis2 / factor);
   const data = new Float32Array(width * height);
 
+  // Max-pooling, not averaging. At 5.6 arcsec per pixel the PSF is under one
+  // pixel wide, so a 4x4 box mean would smear every star's flux across sixteen
+  // pixels and leave the field looking empty. Taking the brightest sample in each
+  // block is what survey images do when the point sources are the point.
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      let sum = 0;
-      let n = 0;
+      let peak = Number.NEGATIVE_INFINITY;
       for (let sy = 0; sy < factor; sy++) {
         const row = (y * factor + sy) * naxis1 + x * factor;
         for (let sx = 0; sx < factor; sx++) {
           const v = view.getFloat32((row + sx) * 4, false); // FITS is big-endian
-          if (Number.isFinite(v)) {
-            sum += v;
-            n++;
-          }
+          if (Number.isFinite(v) && v > peak) peak = v;
         }
       }
-      data[y * width + x] = n ? sum / n : Number.NaN;
+      data[y * width + x] = Number.isFinite(peak) ? peak : Number.NaN;
     }
   }
 
-  // Robust stretch limits: ignore the (many) NaN and negative pixels that mark
-  // flagged data, then clip at the 0.2 and 99.8 percentiles.
+  // Robust stretch limits: ignore the flagged NaN and negative pixels, then clip
+  // just below the faintest real star and just below the brightest few hot pixels.
   const sample: number[] = [];
   for (let i = 0; i < data.length; i += 7) {
     const v = data[i];
@@ -150,8 +150,8 @@ export async function readPlane(
   sample.sort((a, b) => a - b);
   const q = (p: number) =>
     sample.length ? sample[Math.min(sample.length - 1, Math.floor(p * sample.length))] : 1;
-  const low = q(0.02);
-  const high = q(0.998);
+  const low = q(0.05);
+  const high = q(0.995);
 
   return { data, width, height, low, high, bytes: raw.byteLength };
 }

@@ -24,6 +24,7 @@ import {
   useDiscoveryLog,
   useSound,
 } from "@/components/sky/Workbench";
+import { Intro, useIntro } from "@/components/sky/Intro";
 import {
   Aperture,
   Asterisk,
@@ -207,6 +208,7 @@ export default function Console() {
   const [logOpen, setLogOpen] = useState(false);
   const sound = useSound();
   const { entries, update: updateDiscoveries } = useDiscoveryLog();
+  const intro = useIntro();
 
   // The console is a dark instrument; make every shared dialog and sheet follow.
   useEffect(() => {
@@ -382,6 +384,9 @@ export default function Console() {
           <GhostButton onClick={() => { setTourStep(0); setTourOpen(true); }} title="Guided walkthrough">
             <GraduationCap className="mr-1.5 inline size-3.5" />
             Tour
+          </GhostButton>
+          <GhostButton onClick={intro.replay} title="Replay the introduction">
+            Intro
           </GhostButton>
           <GhostButton onClick={() => setGuideOpen(true)} title="Plain-English guide">
             What am I seeing?
@@ -605,6 +610,15 @@ export default function Console() {
               </p>
             </div>
           )}
+
+          <Intro
+            open={intro.open}
+            onDismiss={intro.dismiss}
+            onStart={() => {
+              intro.dismiss();
+              setPlaying(true);
+            }}
+          />
 
           {selected && motion && (
             <div className="absolute bottom-5 left-1/2 w-[min(540px,calc(100%-2.5rem))] -translate-x-1/2 rounded-lg border border-[var(--deck-line)] p-4" style={{ background: "var(--deck-panel)" }}>
