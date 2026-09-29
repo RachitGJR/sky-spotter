@@ -1,0 +1,46 @@
+/* Mission-console palette. I picked a near-black instrument look with one
+   violet for interaction, cyan for measured values and amber for discoveries,
+   so the readouts stay legible against real sky pixels. */
+
+:root {
+  --deck-bg: #06070a;
+  --deck-panel: #0b0d12;
+  --deck-panel-2: #10131a;
+  --deck-raised: #161a23;
+  --deck-line: #1e232d;
+  --deck-line-soft: #161a22;
+  --deck-text: #e8eaef;
+  --deck-muted: #7d8695;
+  --deck-dim: #545c6b;
+  --deck-violet: #8f7bff;
+  --deck-cyan: #35cfd6;
+  --deck-amber: #f5a524;
+  --deck-green: #3ecf8e;
+  --deck-red: #f2555a;
+}
+
+.deck-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--deck-line) transparent;
+}
+.deck-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.deck-scroll::-webkit-scrollbar-thumb {
+  background: var(--deck-line);
+  border-radius: 999px;
+}
+.deck-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes deck-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.deck-pulse { animation: deck-pulse 1.1s ease-in-out infinite; }
+
+.deck-hairline {
+  box-shadow: inset 0 0 0 1px var(--deck-line-soft);
+}
