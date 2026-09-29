@@ -1,6 +1,5 @@
 import { motion } from "framer-motion";
 import { Link } from "react-router";
-import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { FIELDS, SURVEY_REPEAT_DAYS } from "@/lib/spherex/fields";
 
@@ -31,8 +30,7 @@ const PROVENANCE = [
 ];
 
 export default function Landing() {
-  const { isAuthenticated } = useAuth();
-  const target = isAuthenticated ? "/dashboard" : "/auth?returnTo=%2Fdashboard";
+  const target = "/dashboard";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -43,7 +41,7 @@ export default function Landing() {
             <span className="text-[13px] text-muted-foreground">Blink Comparator</span>
           </div>
           <Button asChild size="sm" variant="outline">
-            <Link to={target}>{isAuthenticated ? "Open comparator" : "Sign in"}</Link>
+            <Link to={target}>Open comparator</Link>
           </Button>
         </div>
       </header>

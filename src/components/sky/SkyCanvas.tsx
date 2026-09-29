@@ -4,7 +4,7 @@ import type { SkyPlane, SpherexHeader } from "@/lib/spherex/archive";
 import type { Mover } from "@/lib/spherex/movers";
 
 export type View = { ra: number; dec: number; fovDeg: number };
-export type Tone = "ink" | "paper";
+export type Tone = "ink" | "paper" | "thermal";
 
 type Props = {
   header: SpherexHeader | null;
@@ -23,7 +23,30 @@ type Props = {
 
 const INK_BG = "#0b0b0c";
 const PAPER_BG = "#f7f6f3";
+const THERMAL_BG = "#05070d";
 const ACCENT = "#c2703d";
+
+/** False-colour ramp for the thermal view: cool for faint sky, hot for point sources. */
+const THERMAL_STOPS: [number, number, number][] = [
+  [8, 14, 40],
+  [18, 62, 96],
+  [46, 140, 132],
+  [206, 156, 66],
+  [252, 236, 214],
+];
+
+function thermalColour(t: number) {
+  const x = Math.max(0, Math.min(0.9999, t)) * (THERMAL_STOPS.length - 1);
+  const i = Math.floor(x);
+  const f = x - i;
+  const a = THERMAL_STOPS[i];
+  const b = THERMAL_STOPS[i + 1];
+  return [
+    a[0] + (b[0] - a[0]) * f,
+    a[1] + (b[1] - a[1]) * f,
+    a[2] + (b[2] - a[2]) * f,
+  ] as const;
+}
 
 /** Upper bound on the pixels we shade per sky rebuild, so a big window stays responsive. */
 const MAX_SKY_PIXELS = 1_500_000;
@@ -132,7 +155,7 @@ export function SkyCanvas({
     const halfW = halfH * aspect;
     const sx = (2 * halfW) / w;
     const sy = (2 * halfH) / h;
-    const dark = tone === "ink";
+    const dark = tone !== "paper";
     const span = Math.max(1e-9, plane.high - plane.low);
     const { data } = plane;
     const dataW = plane.width;
@@ -163,12 +186,19 @@ export function SkyCanvas({
           continue;
         }
         const raw = data[Math.round(row) * dataW + Math.round(col)];
-        const t = Math.max(0, Math.min(1, ((raw - plane.low) / span)));
-        const level = Number.isFinite(raw) ? Math.round(255 * (Math.asinh(t * 20) * inv1q)) : 0;
-        const out = dark ? level : 255 - level;
-        px[i] = out;
-        px[i + 1] = out;
-        px[i + 2] = dark ? out : Math.max(0, out - 3);
+        const t = Math.max(0, Math.min(1, (raw - plane.low) / span));
+        const level = Number.isFinite(raw) ? Math.asinh(t * 20) * inv1q : 0;
+        if (tone === "thermal") {
+          const c = thermalColour(level);
+          px[i] = c[0];
+          px[i + 1] = c[1];
+          px[i + 2] = c[2];
+        } else {
+          const out = dark ? Math.round(255 * level) : 255 - Math.round(255 * level);
+          px[i] = out;
+          px[i + 1] = out;
+          px[i + 2] = dark ? out : Math.max(0, out - 3);
+        }
         px[i + 3] = 255;
         i += 4;
       }
@@ -208,7 +238,7 @@ export function SkyCanvas({
       ctx.drawImage(sky, 0, 0, size.w, size.h);
     }
 
-    const dark = tone === "ink";
+    const dark = tone !== "paper";
     const grid = dark ? "rgba(255,255,255,0.13)" : "rgba(17,17,19,0.14)";
     const label = dark ? "rgba(255,255,255,0.55)" : "rgba(17,17,19,0.5)";
     const aspect = size.w / size.h;
@@ -394,7 +424,9 @@ export function SkyCanvas({
     <div
       ref={wrapRef}
       className="relative size-full overflow-hidden"
-      style={{ background: tone === "ink" ? INK_BG : PAPER_BG }}
+      style={{
+        background: tone === "ink" ? INK_BG : tone === "thermal" ? THERMAL_BG : PAPER_BG,
+      }}
     >
       <canvas
         ref={canvasRef}
