@@ -1,11 +1,11 @@
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/convex/_generated/api";
-import { readHeader, readPlane, type SkyPlane, type SpherexHeader } from "@/lib/spherex/archive";
-import { addDays, formatAngle, formatDec, formatRa, project, separation, shortDate } from "@/lib/spherex/astro";
-import { FIELDS, SURVEY_REPEAT_DAYS, getField } from "@/lib/spherex/fields";
+import { loadHeader, loadPlane, type SkyPlane, type SpherexHeader } from "@/lib/spherex/archive";
+import { daysBetween, formatAngle, formatDec, formatRa, project, separation } from "@/lib/spherex/astro";
+import { FIELDS, getField, type SurveyEpoch } from "@/lib/spherex/fields";
 import { apparentMagnitude, motionOf, type Mover } from "@/lib/spherex/movers";
-import { SkyCanvas, type Tone, type View } from "@/components/sky/SkyCanvas";
+import { SkyCanvas, type Compare, type Tone, type View } from "@/components/sky/SkyCanvas";
 import {
   BAND_COUNT,
   BAND_WAVELENGTHS,
@@ -177,6 +177,55 @@ const FILTERS: { id: Tone; label: string }[] = [
   { id: "paper", label: "Invert" },
 ];
 
+const COMPARE_MODES: { id: Compare; label: string; hint: string }[] = [
+  { id: "blink", label: "Blink", hint: "alternate the two exposures" },
+  { id: "split", label: "Split", hint: "epoch A left, epoch B right" },
+  { id: "overlay", label: "Overlay", hint: "A in red, B in blue; movers come off the grey" },
+  { id: "diff", label: "Diff", hint: "B minus A; a mover shows as a bright/dark pair" },
+];
+
+/** Loads one real exposure, keyed by object key and cached in the archive module. */
+function useExposure(epoch: SurveyEpoch | undefined) {
+  const [header, setHeader] = useState<SpherexHeader | null>(null);
+  const [plane, setPlane] = useState<SkyPlane | null>(null);
+  const [status, setStatus] = useState<"idle" | "header" | "plane" | "ready" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const key = epoch?.key;
+
+  useEffect(() => {
+    if (!key) {
+      setHeader(null);
+      setPlane(null);
+      setStatus("idle");
+      return;
+    }
+    let cancelled = false;
+    setStatus("header");
+    setError(null);
+    (async () => {
+      try {
+        const h = await loadHeader(key);
+        if (cancelled) return;
+        setHeader(h);
+        setStatus("plane");
+        const p = await loadPlane(h, 510);
+        if (cancelled) return;
+        setPlane(p);
+        setStatus("ready");
+      } catch (e) {
+        if (cancelled) return;
+        setStatus("error");
+        setError(e instanceof Error ? e.message : "Could not read the SPHEREx archive.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [key]);
+
+  return { header, plane, status, error };
+}
+
 /* ------------------------------------------------------------------ *
  * The console
  * ------------------------------------------------------------------ */
@@ -185,20 +234,29 @@ export default function Console() {
   const [fieldId, setFieldId] = useState(FIELDS[0].id);
   const field = useMemo(() => getField(fieldId), [fieldId]);
 
-  const [header, setHeader] = useState<SpherexHeader | null>(null);
-  const [plane, setPlane] = useState<SkyPlane | null>(null);
-  const [status, setStatus] = useState<"header" | "plane" | "ready" | "error">("header");
-  const [error, setError] = useState<string | null>(null);
+  // Two real exposures, chosen from the visits the archive actually published for
+  // this field. S1-S4 in the rail; A and B are the pair under the cursor.
+  const [aIdx, setAIdx] = useState(0);
+  const [bIdx, setBIdx] = useState(1);
+  const epochA = field.epochs[Math.min(aIdx, field.epochs.length - 1)];
+  const epochB = field.epochs[Math.min(bIdx, field.epochs.length - 1)];
+
+  const expA = useExposure(epochA);
+  const expB = useExposure(epochB);
+  const header = expA.header ?? expB.header;
+  const status = expA.status === "error" || expB.status === "error" ? "error" : expA.status === "ready" || expB.status === "ready" ? "ready" : "header";
+  const error = expA.error ?? expB.error;
 
   const [epoch, setEpoch] = useState<0 | 1>(0);
   const [playing, setPlaying] = useState(true);
   const [intervalMs, setIntervalMs] = useState(950);
   const [tone, setTone] = useState<Tone>("ink");
+  const [compare, setCompare] = useState<Compare>("blink");
   const [showGrid, setShowGrid] = useState(true);
   const [follow, setFollow] = useState(false);
   const [onlyInFrame, setOnlyInFrame] = useState(false);
   const [band, setBand] = useState(28);
-  const [view, setView] = useState<View>({ ra: field.fallbackRa, dec: field.fallbackDec, fovDeg: 3.15 });
+  const [view, setView] = useState<View>({ ra: epochA.ra, dec: epochA.dec, fovDeg: 3.48 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [tourOpen, setTourOpen] = useState(false);
@@ -215,42 +273,31 @@ export default function Console() {
     document.documentElement.classList.add("dark");
   }, []);
 
-  /* --- the archive ------------------------------------------------------ */
+  // Frame the field whenever the citizen switches fields, and centre on the midpoint
+  // of the two selected exposures so neither sits off the edge of the canvas.
   useEffect(() => {
-    const controller = new AbortController();
-    let cancelled = false;
-    setStatus("header");
-    setError(null);
-    setHeader(null);
-    setPlane(null);
     setSelectedId(null);
-    setView({ ra: field.fallbackRa, dec: field.fallbackDec, fovDeg: 3.15 });
-
-    (async () => {
-      try {
-        const h = await readHeader(field, controller.signal);
-        if (cancelled) return;
-        setHeader(h);
-        setStatus("plane");
-        const p = await readPlane(h, 510, controller.signal);
-        if (cancelled) return;
-        setPlane(p);
-        setStatus("ready");
-      } catch (e) {
-        if (cancelled || controller.signal.aborted) return;
-        setStatus("error");
-        setError(e instanceof Error ? e.message : "Could not read the SPHEREx archive.");
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
+    setAIdx(0);
+    setBIdx(Math.min(1, field.epochs.length - 1));
   }, [field]);
 
-  const epoch1 = header ? header.dateObs.slice(0, 10) : "";
-  const epoch2 = header ? addDays(epoch1, SURVEY_REPEAT_DAYS) : "";
+  useEffect(() => {
+    const ra = (epochA.ra + epochB.ra) / 2;
+    const dec = (epochA.dec + epochB.dec) / 2;
+    setView((v) => ({ ...v, ra: ((ra + 540) % 360) - 180, dec }));
+  }, [epochA.ra, epochA.dec, epochB.ra, epochB.dec]);
+
+  const epoch1 = epochA.date;
+  const epoch2 = epochB.date;
+  const baselineDays = Math.max(1, daysBetween(epoch1, epoch2));
+
+  /**
+   * The sky the exposures actually cover, from the live header: 2040 pixels at
+   * about 6.14 arcsec is 3.48 degrees. Zooming out past that only ever reveals
+   * empty canvas, so it is not offered.
+   */
+  const detectorFov = header ? header.naxis1 * header.plateScale : 3.48;
+  const maxFov = detectorFov * 1.06;
 
   /* --- real ephemerides ------------------------------------------------- */
   const designations = useMemo(() => field.members.map((m) => m.designation), [field]);
@@ -297,16 +344,20 @@ export default function Console() {
   }, [playing, intervalMs]);
 
   const selected = movers.find((m) => m.id === selectedId) ?? null;
-  const motion = selected ? motionOf(selected, SURVEY_REPEAT_DAYS) : null;
+  const motion = selected ? motionOf(selected, baselineDays) : null;
 
-  const focusMover = useCallback((m: Mover) => {
-    const a = project(m.epoch1.ra, m.epoch1.dec, m.epoch2.ra, m.epoch2.dec);
-    setView({
-      ra: m.epoch1.ra,
-      dec: m.epoch1.dec,
-      fovDeg: Math.min(8, Math.max(0.3, Math.hypot(a.x, a.y) * 1.7)),
-    });
-  }, []);
+  const focusMover = useCallback(
+    (m: Mover) => {
+      const a = project(m.epoch1.ra, m.epoch1.dec, m.epoch2.ra, m.epoch2.dec);
+      // Never ask for more sky than the exposures actually cover.
+      setView({
+        ra: m.epoch1.ra,
+        dec: m.epoch1.dec,
+        fovDeg: Math.min(maxFov, Math.max(0.3, Math.hypot(a.x, a.y) * 1.7)),
+      });
+    },
+    [maxFov],
+  );
 
   useEffect(() => {
     if (!follow || !selected) return;
@@ -329,12 +380,12 @@ export default function Console() {
       } else if (e.key === "+" || e.key === "=") {
         setView((v) => ({ ...v, fovDeg: Math.max(0.15, v.fovDeg / 1.3) }));
       } else if (e.key === "-" || e.key === "_") {
-        setView((v) => ({ ...v, fovDeg: Math.min(8, v.fovDeg * 1.3) }));
+        setView((v) => ({ ...v, fovDeg: Math.min(maxFov, v.fovDeg * 1.3) }));
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [maxFov]);
 
   const visible = useMemo(() => {
     if (!onlyInFrame) return movers;
@@ -381,7 +432,7 @@ export default function Console() {
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          <GhostButton onClick={() => { setTourStep(0); setTourOpen(true); }} title="Guided walkthrough">
+          <GhostButton onClick={() => setTourOpen(true)} title="Guided walkthrough">
             <GraduationCap className="mr-1.5 inline size-3.5" />
             Tour
           </GhostButton>
@@ -389,7 +440,7 @@ export default function Console() {
             Intro
           </GhostButton>
           <GhostButton onClick={() => setGuideOpen(true)} title="Plain-English guide">
-            What am I seeing?
+            Guide
           </GhostButton>
           <GhostButton onClick={() => setExplainerOpen(true)}>Explainer</GhostButton>
           <NeoWsInline />
@@ -447,43 +498,122 @@ export default function Console() {
             />
           </Rail>
 
-          <Rail title="Observation mode">
+          <Rail
+            title="Compare"
+            action={
+              <span className="font-mono text-[10px] text-[var(--deck-dim)]">
+                {COMPARE_MODES.find((m) => m.id === compare)?.hint}
+              </span>
+            }
+          >
             <Option
-              options={[
-                { id: "blink", label: "Blink" },
-                { id: "freeze", label: "Freeze" },
-                { id: "follow", label: "Follow" },
-              ]}
-              value={playing ? "blink" : follow ? "follow" : "freeze"}
-              onChange={(v) => {
-                if (v === "blink") {
-                  setPlaying(true);
-                  setFollow(false);
-                }
-                if (v === "freeze") {
-                  setPlaying(false);
-                  setFollow(false);
-                }
-                if (v === "follow") {
-                  setFollow(true);
-                  setPlaying(true);
-                }
-              }}
+              options={COMPARE_MODES.map((m) => ({ id: m.id, label: m.label }))}
+              value={compare}
+              onChange={setCompare}
+              columns={2}
             />
+            {compare === "blink" && (
+              <div className="mt-3">
+                <Option
+                  options={[
+                    { id: "play", label: "Auto" },
+                    { id: "hold", label: "Hold" },
+                  ]}
+                  value={playing ? "play" : "hold"}
+                  onChange={(v) => {
+                    setPlaying(v === "play");
+                    if (v === "play") setFollow(false);
+                  }}
+                />
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <GhostButton active={follow} onClick={() => setFollow((f) => !f)}>
+                    Follow the body
+                  </GhostButton>
+                </div>
+              </div>
+            )}
           </Rail>
 
-          <Rail title="Survey epoch">
-            <Option
-              options={[
-                { id: "a", label: "Epoch A", meta: shortDate(epoch1) },
-                { id: "b", label: "Epoch B", meta: shortDate(epoch2) },
+          <Rail
+            title="Survey epochs"
+            action={
+              <span className="font-mono text-[10px] text-[var(--deck-dim)]">+{baselineDays} d</span>
+            }
+          >
+            <div className="mb-3 space-y-px overflow-hidden rounded-md border border-[var(--deck-line)]">
+              {field.epochs.map((e, i) => {
+                const isA = i === aIdx;
+                const isB = i === bIdx;
+                return (
+                  <div
+                    key={e.key}
+                    className={`flex items-center gap-2 px-2 py-1.5 ${
+                      isA || isB ? "bg-[var(--deck-raised)]" : ""
+                    }`}
+                  >
+                    <span className="w-4 shrink-0 font-mono text-[10px] text-[var(--deck-dim)]">
+                      S{i + 1}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--deck-text)]">
+                      {e.date}
+                    </span>
+                    <span className="shrink-0 font-mono text-[9px] text-[var(--deck-dim)]">
+                      {e.visit.replace("20", "’")}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setAIdx(i);
+                        if (bIdx === i) setBIdx(aIdx);
+                      }}
+                      title={`Use ${e.date} as epoch A`}
+                      className={`grid size-6 shrink-0 place-items-center rounded font-mono text-[10px] transition-colors ${
+                        isA
+                          ? "bg-[var(--deck-accent)] text-[var(--deck-bg)]"
+                          : "text-[var(--deck-dim)] hover:bg-[var(--deck-line)] hover:text-[var(--deck-text)]"
+                      }`}
+                    >
+                      A
+                    </button>
+                    <button
+                      onClick={() => {
+                        setBIdx(i);
+                        if (aIdx === i) setAIdx(bIdx);
+                      }}
+                      title={`Use ${e.date} as epoch B`}
+                      className={`grid size-6 shrink-0 place-items-center rounded font-mono text-[10px] transition-colors ${
+                        isB
+                          ? "bg-[var(--deck-text)] text-[var(--deck-bg)]"
+                          : "text-[var(--deck-dim)] hover:bg-[var(--deck-line)] hover:text-[var(--deck-text)]"
+                      }`}
+                    >
+                      B
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <Readout
+              rows={[
+                ["epoch A", `${epoch1} · ${epochA.visit}`],
+                ["epoch B", `${epoch2} · ${epochB.visit}`],
+                ["baseline", `${baselineDays} days`],
               ]}
-              value={epoch === 0 ? "a" : "b"}
-              onChange={(v) => {
-                setEpoch(v === "a" ? 0 : 1);
-                setPlaying(false);
-              }}
             />
+            {compare === "blink" && (
+              <div className="mt-3">
+                <Option
+                  options={[
+                    { id: "a", label: "Show A" },
+                    { id: "b", label: "Show B" },
+                  ]}
+                  value={epoch === 0 ? "a" : "b"}
+                  onChange={(v) => {
+                    setEpoch(v === "a" ? 0 : 1);
+                    setPlaying(false);
+                  }}
+                />
+              </div>
+            )}
           </Rail>
 
           <Rail title="Blink speed" action={<span className="font-mono text-[10px] text-[var(--deck-dim)]">{(intervalMs / 1000).toFixed(2)}s / epoch</span>}>
@@ -532,33 +662,40 @@ export default function Console() {
         {/* --------------------------------------------------------- canvas */}
         <main className="relative min-w-0 flex-1">
           <SkyCanvas
-            header={header}
-            plane={plane}
+            a={{
+              header: expA.header,
+              plane: expA.plane,
+              label: `A · ${epochA.visit} · ${epoch1}`,
+              short: `A · ${epoch1}`,
+            }}
+            b={{
+              header: expB.header,
+              plane: expB.plane,
+              label: `B · ${epochB.visit} · ${epoch2}`,
+              short: `B · ${epoch2}`,
+            }}
+            compare={compare}
             view={view}
             tone={tone}
             epoch={epoch}
-            epochLabels={[
-              `EPOCH A · ${shortDate(epoch1)}`,
-              `EPOCH B · ${shortDate(epoch2)} · +${SURVEY_REPEAT_DAYS} d`,
-            ]}
             movers={visible}
             selectedId={selectedId}
             onSelect={setSelectedId}
             onViewChange={setView}
             showGrid={showGrid}
-            busy={status === "header" || status === "plane"}
+            busy={status !== "ready" && status !== "error"}
           />
 
           <div className="pointer-events-none absolute left-5 top-5 font-mono text-[10px] text-[var(--deck-dim)]">
             <p>α {formatRa(centre.ra)}</p>
             <p className="mt-0.5">δ {formatDec(centre.dec)}</p>
-            <p className="mt-0.5">FOV {view.fovDeg.toFixed(2)}° · PSF {header ? header.psfFwhmArcsec.toFixed(1) : "—"}″</p>
+            <p className="mt-0.5">
+              FOV {view.fovDeg.toFixed(2)}° · PSF {header ? header.psfFwhmArcsec.toFixed(1) : "—"}″
+            </p>
           </div>
 
           <div className="pointer-events-none absolute right-5 top-5 text-right font-mono text-[10px]">
-            <p className="text-[var(--deck-ok)]">
-              archive · {status === "ready" ? "live" : status}
-            </p>
+            <p className="text-[var(--deck-ok)]">archive · {status === "ready" ? "live" : status}</p>
             <p className="mt-0.5 text-[var(--deck-dim)]">{header ? header.obsid : "—"}</p>
             {moversError && <p className="mt-0.5 text-[var(--deck-bad)]">horizons · error</p>}
           </div>
@@ -567,7 +704,7 @@ export default function Console() {
             <IconButton onClick={() => setView((v) => ({ ...v, fovDeg: Math.max(0.15, v.fovDeg / 1.4) }))} label="Zoom in">
               +
             </IconButton>
-            <IconButton onClick={() => setView((v) => ({ ...v, fovDeg: Math.min(8, v.fovDeg * 1.4) }))} label="Zoom out">
+            <IconButton onClick={() => setView((v) => ({ ...v, fovDeg: Math.min(maxFov, v.fovDeg * 1.4) }))} label="Zoom out">
               −
             </IconButton>
             <IconButton
@@ -581,7 +718,7 @@ export default function Console() {
               <Grid3x3 className="size-3.5" />
             </IconButton>
             <IconButton
-              onClick={() => header && setView({ ra: header.ra, dec: header.dec, fovDeg: 3.15 })}
+              onClick={() => setView({ ra: centre.ra, dec: centre.dec, fovDeg: detectorFov })}
               label="Reset view"
             >
               <RotateCcw className="size-3.5" />
@@ -712,7 +849,7 @@ export default function Console() {
           epoch1={epoch1}
           epoch2={epoch2}
           field={{ id: field.id, name: field.name }}
-          baselineDays={SURVEY_REPEAT_DAYS}
+          baselineDays={baselineDays}
           onSave={(d) => updateDiscoveries([d, ...entries])}
         />
       )}

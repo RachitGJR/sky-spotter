@@ -333,22 +333,6 @@ export function LogDialog({
  * Beginner mode + guided tour
  * ------------------------------------------------------------------ */
 
-export const PLAIN_WORDS: Record<string, string> = {
-  "Near-Earth asteroid": "space rock that comes near us",
-  "Main-belt asteroid": "space rock between Mars and Jupiter",
-  "Jupiter trojan": "space rock that rides along with Jupiter",
-  "Trans-Neptunian object": "very distant ice world",
-  "Brown dwarf": "star that never quite switched on",
-  "Unknown transient": "something we cannot explain yet",
-  "Right ascension": "where it is along the sky's clock",
-  "Declination": "how far above or below the celestial equator",
-  "Motion over both epochs": "how far it walked between the two pictures",
-  "Direction of travel": "which way it was heading",
-  "Distance from Earth": "how far away it is right now",
-  "Apparent magnitude (V)": "how bright it looks, like a brightness score",
-  "Modelled spectrum": "the fingerprint we expect, drawn from chemistry",
-};
-
 export function useSound() {
   const [on, setOn] = useState(false);
   useEffect(() => {
@@ -372,43 +356,26 @@ export function useSound() {
   return { on, setOn };
 }
 
-export function ThemeToggle() {
-  const [dark, setDark] = useState(true);
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark);
-  }, [dark]);
-  return (
-    <Button
-      size="sm"
-      variant="ghost"
-      onClick={() => setDark((d) => !d)}
-      aria-label="Toggle light and dark"
-    >
-      {dark ? "Light" : "Dark"}
-    </Button>
-  );
-}
-
 const TOUR_STEPS = [
   {
     title: "Pick a field",
-    body: "Each field is a real SPHEREx exposure of 3.15° of sky. Switch between them at the top.",
+    body: "Each field is a patch of sky SPHEREx really photographed, about 3.5° across. Switch between them at the top.",
   },
   {
-    title: "Blink the epochs",
-    body: "Press play. The two dates are the exposure itself and the next all-sky visit 184 days later. Stars do not move.",
+    title: "Choose two epochs",
+    body: "Every field here was observed four times between April 2025 and May 2026. Mark any two as A and B in the rail; the dates are the real DATE-OBS of those exposures.",
+  },
+  {
+    title: "Blink them",
+    body: "Press play and the two exposures alternate. Stars hold still. Anything that hops is either a solar-system body or a discovery. Split, overlay and difference are there for when blinking is not enough.",
   },
   {
     title: "Watch the orange ring",
-    body: "A ring marks a tracked body. The dashed line is the ground it covers between the two epochs.",
+    body: "A ring marks a tracked body, dashed between its two positions. The move is computed by JPL Horizons from the real catalogue orbit.",
   },
   {
     title: "Read the motion",
     body: "Select the body. You get real coordinates at both dates, how far it moved and how fast it was closing.",
-  },
-  {
-    title: "Check the chemistry",
-    body: "The spectrum panel shows which of the 102 infrared bands carries water, methane or carbon dioxide.",
   },
   {
     title: "Log the discovery",

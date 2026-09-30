@@ -91,6 +91,14 @@ export function addDays(iso: string, days: number) {
   return d.toISOString().slice(0, 10);
 }
 
+/** Whole days between two ISO dates. Used for the real baseline between two epochs. */
+export function daysBetween(fromIso: string, toIso: string) {
+  if (!fromIso || !toIso) return 0;
+  const a = Date.parse(`${fromIso.slice(0, 10)}T00:00:00Z`);
+  const b = Date.parse(`${toIso.slice(0, 10)}T00:00:00Z`);
+  return Math.round((b - a) / 86_400_000);
+}
+
 export function shortDate(iso: string) {
   return iso ? iso.slice(0, 10) : "—";
 }

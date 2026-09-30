@@ -39,9 +39,15 @@ async function fetchEphemeris(
   date1: string,
   date2: string,
 ): Promise<Ephemeris | null> {
+  // Horizons needs a forward time range. The citizen can pick the two epochs in
+  // either order, so ask for the earlier one first and hand the answers back in
+  // the order the caller asked for.
+  const reversed = date2 < date1;
+  const start = reversed ? date2 : date1;
+  const stop = reversed ? date1 : date2;
   const days = Math.max(
     1,
-    Math.round((new Date(date2).getTime() - new Date(date1).getTime()) / 86_400_000),
+    Math.round((new Date(stop).getTime() - new Date(start).getTime()) / 86_400_000),
   );
   const params = new URLSearchParams({
     format: "text",
@@ -54,8 +60,8 @@ async function fetchEphemeris(
     ANG_FORMAT: "'DEG'",
     QUANTITIES: "'1,20'",
     CSV_FORMAT: "'YES'",
-    START_TIME: `'${date1}'`,
-    STOP_TIME: `'${date2}'`,
+    START_TIME: `'${start}'`,
+    STOP_TIME: `'${stop}'`,
     STEP_SIZE: `'${days} d'`,
   });
 
@@ -71,11 +77,17 @@ async function fetchEphemeris(
         .map((line) => line.split(",").map((cell) => cell.trim()))
         .filter((cell) => cell.length > 5 && cell[3] !== "");
       if (rows.length < 2) return null;
-      const last = rows[rows.length - 1];
+      const toEpoch = (row: string[]) => ({
+        ra: Number(row[3]),
+        dec: Number(row[4]),
+        distanceAu: Number(row[5]),
+      });
+      const first = toEpoch(rows[0]);
+      const last = toEpoch(rows[rows.length - 1]);
       return {
         designation,
-        epoch1: { ra: Number(rows[0][3]), dec: Number(rows[0][4]), distanceAu: Number(rows[0][5]) },
-        epoch2: { ra: Number(last[3]), dec: Number(last[4]), distanceAu: Number(last[5]) },
+        epoch1: reversed ? last : first,
+        epoch2: reversed ? first : last,
       };
     } catch {
       await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
