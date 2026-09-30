@@ -16,7 +16,8 @@ export function project(ra: number, dec: number, ra0: number, dec0: number) {
   const cosd = Math.cos(d);
   return {
     x: (cosd * Math.sin(a - a0)) / cosC / DEG,
-    y: (cosd * Math.cos(d0) * Math.sin(d) - Math.sin(d0) * cosd * Math.cos(a - a0)) / cosC / DEG,
+    // ξ runs along the tangent point's right ascension, η along its declination.
+    y: (Math.sin(d) * Math.cos(d0) - cosd * Math.sin(d0) * Math.cos(a - a0)) / cosC / DEG,
   };
 }
 
@@ -33,10 +34,8 @@ export function deproject(x: number, y: number, ra0: number, dec0: number) {
   const cosC = Math.cos(c);
   const sinD = cosC * Math.sin(d0) + (eta * sinC * Math.cos(d0)) / rho;
   const dec = Math.asin(Math.min(1, Math.max(-1, sinD)));
-  const y1 = rho * sinC;
-  const x1 = y1 * Math.sin(a0) - xi * Math.cos(d0) * Math.cos(a0);
-  const y2 = y1 * Math.cos(a0) + xi * Math.cos(d0) * Math.sin(a0);
-  const ra = a0 + Math.atan2(x1, y2);
+  const ra =
+    a0 + Math.atan2(xi * sinC, rho * Math.cos(d0) * cosC - eta * Math.sin(d0) * sinC);
   return { ra: ((ra / DEG) % 360 + 360) % 360, dec: dec / DEG };
 }
 
@@ -89,14 +88,6 @@ export function addDays(iso: string, days: number) {
   const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
-}
-
-/** Whole days between two ISO dates. Used for the real baseline between two epochs. */
-export function daysBetween(fromIso: string, toIso: string) {
-  if (!fromIso || !toIso) return 0;
-  const a = Date.parse(`${fromIso.slice(0, 10)}T00:00:00Z`);
-  const b = Date.parse(`${toIso.slice(0, 10)}T00:00:00Z`);
-  return Math.round((b - a) / 86_400_000);
 }
 
 export function shortDate(iso: string) {

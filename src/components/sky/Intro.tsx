@@ -15,7 +15,7 @@ const BEATS = [
   },
   {
     title: "Nearby rocks do move",
-    body: "Six months later, the same patch of sky was photographed again. The orange ring marks something that shifted. That is the whole experiment — press play.",
+    body: "SPHEREx came back to this patch of sky again and again, months apart. The orange ring marks something that shifted between two of those visits. That is the whole experiment — press play.",
   },
 ];
 

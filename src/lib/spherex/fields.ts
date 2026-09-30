@@ -240,8 +240,12 @@ export function getField(id: string): SkyField {
   return FIELDS.find((f) => f.id === id) ?? FIELDS[0];
 }
 
-/**
- * The whole-sky survey baseline, 184 days. Kept for the copy that explains the
- * cadence; the actual interval between two epochs is measured from their DATE-OBS.
- */
-export const SURVEY_REPEAT_DAYS = 184;
+/** Days between the two selected epochs, measured from their real DATE-OBS. */
+export function baselineDays(field: SkyField, a: number, b: number) {
+  const one = field.epochs[Math.min(a, field.epochs.length - 1)];
+  const two = field.epochs[Math.min(b, field.epochs.length - 1)];
+  return Math.max(
+    1,
+    Math.round((Date.parse(two.date) - Date.parse(one.date)) / 86_400_000),
+  );
+}

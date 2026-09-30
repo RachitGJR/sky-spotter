@@ -2,11 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deproject, formatDec, formatRa, project, type SkyPoint } from "@/lib/spherex/astro";
 import type { SkyPlane, SpherexHeader } from "@/lib/spherex/archive";
 import type { Mover } from "@/lib/spherex/movers";
+import { shadeFrame, type Compare, type Tone, type View } from "@/lib/spherex/shade";
+import { fitFovDeg } from "@/lib/spherex/archive";
 
-export type View = { ra: number; dec: number; fovDeg: number };
-export type Tone = "ink" | "paper" | "thermal";
-/** How the two selected epochs are combined on screen. */
-export type Compare = "blink" | "split" | "overlay" | "diff";
+export type { Compare, Tone, View };
 
 export type Epoch = {
   header: SpherexHeader | null;
@@ -30,6 +29,11 @@ type Props = {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onViewChange: (view: View) => void;
+  /**
+   * The canvas owns its own geometry, so it reports the view that shows the whole
+   * footprint and the limit beyond which there is only empty canvas.
+   */
+  onGeometry: (geometry: { fitFov: number; maxFov: number }) => void;
   showGrid: boolean;
   busy: boolean;
 };
@@ -38,26 +42,6 @@ const INK_BG = "#0b0b0c";
 const PAPER_BG = "#f7f6f3";
 const THERMAL_BG = "#05070d";
 const ACCENT = "#c2703d";
-
-/** False-colour ramp for the thermal view: cool for faint sky, hot for point sources. */
-const THERMAL_STOPS: [number, number, number][] = [
-  [8, 14, 40],
-  [18, 62, 96],
-  [46, 140, 132],
-  [206, 156, 66],
-  [252, 236, 214],
-];
-
-function thermalColour(t: number) {
-  const x = Math.max(0, Math.min(0.9999, t)) * (THERMAL_STOPS.length - 1);
-  const i = Math.floor(x);
-  const f = x - i;
-  const a = THERMAL_STOPS[i];
-  const b = THERMAL_STOPS[i + 1];
-  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f] as const;
-}
-
-const DEG = 180 / Math.PI;
 
 /**
  * Upper bound on the pixels one sky rebuild shades. Both epochs are resampled in a
@@ -76,82 +60,6 @@ const ZOOM_MIN = 0.15;
 /** Zooming out past the detector only ever shows empty sky, so it is not offered. */
 const ZOOM_OUT_MARGIN = 1.06;
 
-/** World unit vector -> tangent plane, using dot products instead of trig. */
-function makeProjector(ra0Deg: number, dec0Deg: number) {
-  const d0 = (dec0Deg * Math.PI) / 180;
-  const a0 = (ra0Deg * Math.PI) / 180;
-  const sinD0 = Math.sin(d0);
-  const cosD0 = Math.cos(d0);
-  const sinA0 = Math.sin(a0);
-  const cosA0 = Math.cos(a0);
-  return (raDeg: number, decDeg: number) => {
-    const d = (decDeg * Math.PI) / 180;
-    const a = (raDeg * Math.PI) / 180;
-    const cosD = Math.cos(d);
-    const z = Math.sin(d);
-    const x = cosD * Math.cos(a);
-    const y = cosD * Math.sin(a);
-    const u = y * cosA0 - x * sinA0;
-    const w = x * cosA0 + y * sinA0;
-    const cosC = sinD0 * z + cosD0 * w;
-    if (cosC <= 1e-9) return { x: NaN, y: NaN };
-    return { x: u / cosC / DEG, y: (cosD0 * z - sinD0 * w) / cosC / DEG };
-  };
-}
-
-type Shade = {
-  header: SpherexHeader;
-  plane: SkyPlane;
-  /** Standard-coordinate (deg) -> plane sample index. */
-  toIndex: (ra: number, dec: number) => number;
-  low: number;
-  span: number;
-  width: number;
-  height: number;
-};
-
-function makeShade(header: SpherexHeader, plane: SkyPlane): Shade {
-  const [m11, m12, m21, m22] = header.cd;
-  const det = m11 * m22 - m12 * m21;
-  const inv = plane.width / header.naxis1;
-  const baseCol = (header.crpix1 - 1) * inv;
-  const baseRow = (header.crpix2 - 1) * inv;
-  const project = makeProjector(header.ra, header.dec);
-  const k = 1 / det;
-  return {
-    header,
-    plane,
-    width: plane.width,
-    height: plane.height,
-    low: plane.low,
-    span: Math.max(1e-9, plane.high - plane.low),
-    toIndex(ra, dec) {
-      const std = project(ra, dec);
-      const col = (m22 * std.x - m12 * std.y) * k * inv + baseCol;
-      const row = (-m21 * std.x + m11 * std.y) * k * inv + baseRow;
-      if (
-        !Number.isFinite(col) ||
-        !Number.isFinite(row) ||
-        col < 0 ||
-        col >= plane.width ||
-        row < 0 ||
-        row >= plane.height
-      ) {
-        return -1;
-      }
-      return (Math.round(row) * plane.width + Math.round(col)) | 0;
-    },
-  };
-}
-
-function levelOf(s: Shade, i: number) {
-  if (i < 0) return -1;
-  const raw = s.plane.data[i];
-  if (!Number.isFinite(raw)) return 0;
-  const t = Math.max(0, Math.min(1, (raw - s.low) / s.span));
-  return Math.asinh(t * 20) / Math.asinh(20);
-}
-
 export function SkyCanvas({
   a,
   b,
@@ -163,6 +71,7 @@ export function SkyCanvas({
   selectedId,
   onSelect,
   onViewChange,
+  onGeometry,
   showGrid,
   busy,
 }: Props) {
@@ -181,15 +90,29 @@ export function SkyCanvas({
   const [drawn, setDrawn] = useState<View | null>(null);
 
   const zoomOutMax = useMemo(() => {
-    const det = Math.max(a.header?.naxis1 ?? 2040, b.header?.naxis1 ?? 2040);
-    const scale = a.header?.plateScale ?? b.header?.plateScale ?? 0.0015439;
-    return det * scale * ZOOM_OUT_MARGIN;
-  }, [a.header, b.header]);
+    const header = a.header ?? b.header;
+    if (!header) return 4;
+    const aspect = size.w && size.h ? size.w / size.h : 1;
+    // A little past the full footprint, so the dashed outline is not glued to the
+    // edge, but never further: beyond this there is no sky to show.
+    return fitFovDeg(header, aspect) * ZOOM_OUT_MARGIN;
+  }, [a.header, b.header, size.w, size.h]);
 
   const clampZoom = useCallback(
     (fovDeg: number) => Math.min(zoomOutMax, Math.max(ZOOM_MIN, fovDeg)),
     [zoomOutMax],
   );
+
+  const fitFov = useMemo(() => {
+    const header = a.header ?? b.header;
+    if (!header) return 3.5;
+    const aspect = size.w && size.h ? size.w / size.h : 1;
+    return fitFovDeg(header, aspect);
+  }, [a.header, b.header, size.w, size.h]);
+
+  useEffect(() => {
+    onGeometry({ fitFov, maxFov: zoomOutMax });
+  }, [fitFov, zoomOutMax, onGeometry]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -219,123 +142,32 @@ export function SkyCanvas({
   useEffect(() => {
     const canvas = skyCanvasRef.current;
     if (!canvas || !drawn || size.w < 8 || size.h < 8) return;
-    const shadeA = a.header && a.plane ? makeShade(a.header, a.plane) : null;
-    const shadeB = b.header && b.plane ? makeShade(b.header, b.plane) : null;
-    if (!shadeA && !shadeB) return;
+    const epochA = a.header && a.plane ? { header: a.header, plane: a.plane } : null;
+    const epochB = b.header && b.plane ? { header: b.header, plane: b.plane } : null;
+    if (!epochA && !epochB) return;
 
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const cap = Math.sqrt(MAX_SKY_PIXELS / Math.max(1, size.w * size.h));
     const scale = Math.min(dpr, Math.max(0.5, cap));
     const w = Math.max(1, Math.round(size.w * scale));
     const h = Math.max(1, Math.round(size.h * scale));
+    const frame = shadeFrame({
+      a: epochA,
+      b: epochB,
+      compare,
+      epoch,
+      tone,
+      view: drawn,
+      width: w,
+      height: h,
+    });
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const img = ctx.createImageData(w, h);
-
-    const aspect = w / h;
-    const halfH = drawn.fovDeg / 2;
-    const halfW = halfH * aspect;
-    const stepX = (2 * halfW) / w;
-    const stepY = (2 * halfH) / h;
-    const dark = tone !== "paper";
-    const bg = dark ? [14, 14, 16] : [244, 243, 240];
-    const px = img.data;
-    // In split mode each half shows one epoch; the boundary is a hard vertical cut.
-    const splitAt = Math.round(w * 0.5);
-
-    let i = 0;
-    for (let y = 0; y < h; y++) {
-      const yStd = halfH - (y + 0.5) * stepY;
-      for (let x = 0; x < w; x++) {
-        const sky = deproject(-halfW + (x + 0.5) * stepX, yStd, drawn.ra, drawn.dec);
-        let outR: number;
-        let outG: number;
-        let outB: number;
-        const leftIsA = x < splitAt;
-
-        if (compare === "blink") {
-          // Only the epoch on screen has to be resampled, so a flip stays cheap.
-          const shade = epoch === 0 ? shadeA : shadeB;
-          const level = shade ? levelOf(shade, shade.toIndex(sky.ra, sky.dec)) : -1;
-          if (level < 0) {
-            outR = bg[0];
-            outG = bg[1];
-            outB = bg[2];
-          } else if (tone === "thermal") {
-            const c = thermalColour(level);
-            outR = c[0];
-            outG = c[1];
-            outB = c[2];
-          } else {
-            const v = dark ? Math.round(255 * level) : 255 - Math.round(255 * level);
-            outR = v;
-            outG = v;
-            outB = dark ? v : Math.max(0, v - 3);
-          }
-        } else {
-          const la = shadeA ? levelOf(shadeA, shadeA.toIndex(sky.ra, sky.dec)) : -1;
-          const lb = shadeB ? levelOf(shadeB, shadeB.toIndex(sky.ra, sky.dec)) : -1;
-          if (compare === "overlay") {
-            // A and B in two colour channels. Stars land on the grey diagonal; a
-            // source that moved sits off it, as a coloured pair.
-            const s = Math.max(la, lb);
-            if (s < 0) {
-              outR = bg[0];
-              outG = bg[1];
-              outB = bg[2];
-            } else {
-              const d = Math.max(-1, Math.min(1, la - lb));
-              const grey = dark ? 26 + 200 * s : 232 - 190 * s;
-              outR = Math.max(0, Math.min(255, grey + 150 * d));
-              outG = grey;
-              outB = Math.max(0, Math.min(255, grey - 150 * d));
-            }
-          } else if (compare === "diff") {
-            // Signed difference, so a mover reads as a bright/dark dipole.
-            const d = la < 0 || lb < 0 ? 0 : Math.max(-1, Math.min(1, (la - lb) * 3.2));
-            const mag = Math.abs(d);
-            const base = dark ? 12 : 240;
-            const hot = dark ? 236 : 16;
-            outR = Math.round(base + (hot - base) * (d > 0 ? mag : 0));
-            outG = Math.round(base + (hot - base) * (mag * 0.34));
-            outB = Math.round(base + (hot - base) * (d < 0 ? mag : 0));
-          } else {
-            // split: left half epoch A, right half epoch B
-            const lp = leftIsA ? la : lb;
-            if (lp < 0) {
-              outR = bg[0];
-              outG = bg[1];
-              outB = bg[2];
-            } else if (tone === "thermal") {
-              const c = thermalColour(lp);
-              outR = c[0];
-              outG = c[1];
-              outB = c[2];
-            } else {
-              const v = dark ? Math.round(255 * lp) : 255 - Math.round(255 * lp);
-              outR = v;
-              outG = v;
-              outB = dark ? v : Math.max(0, v - 3);
-            }
-          }
-        }
-        px[i] = outR;
-        px[i + 1] = outG;
-        px[i + 2] = outB;
-        px[i + 3] = 255;
-        i += 4;
-      }
-    }
-    ctx.putImageData(img, 0, 0);
+    ctx.putImageData(new ImageData(frame.data, frame.width, frame.height), 0, 0);
   }, [a.header, a.plane, b.header, b.plane, drawn, tone, compare, epoch, size]);
 
-  /**
-   * The live transform that carries the previous bitmap under the pointer while the
-   * rebuild is pending. Small offsets are accurate enough over one zoom step, and it
-   * costs the compositor nothing.
-   */
   /**
    * The live transform that carries the previous frame under the pointer while the
    * rebuild is pending. Both the sky and the overlay sit under the same transform,
@@ -383,6 +215,27 @@ export function SkyCanvas({
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.w, size.h);
+
+    // A faint diagonal hatch marks the part of the canvas the exposures do not
+    // cover. SPHEREx's detector is a square held at an angle, so on a wide window
+    // the corners are always empty; hatching says "no data here" instead of
+    // leaving them looking like a broken render.
+    const hatch = document.createElement("canvas");
+    hatch.width = 8;
+    hatch.height = 8;
+    const hctx = hatch.getContext("2d");
+    let pattern: CanvasPattern | null = null;
+    if (hctx) {
+      hctx.strokeStyle = tone === "paper" ? "rgba(17,17,19,0.14)" : "rgba(255,255,255,0.10)";
+      hctx.lineWidth = 1;
+      hctx.beginPath();
+      hctx.moveTo(-2, 10);
+      hctx.lineTo(10, -2);
+      hctx.moveTo(2, 14);
+      hctx.lineTo(14, 2);
+      hctx.stroke();
+      pattern = ctx.createPattern(hatch, "repeat");
+    }
 
     const base = drawn ?? view;
     const dark = tone !== "paper";
@@ -441,26 +294,26 @@ export function SkyCanvas({
     ctx.fillText(barDeg >= 1 ? `${barDeg}°` : `${Math.round(barDeg * 60)}′`, 16, size.h - 28);
 
     // Detector footprints. Outside them there is no data, so they get a soft
-    // wash rather than a hard black void.
-    const wash = dark ? "rgba(255,255,255,0.022)" : "rgba(17,17,19,0.03)";
+    // wash and a dashed edge rather than a hard black void. The four corners come
+    // from the real WCS, which is a rolled square, not an axis-aligned box.
+    const wash = dark ? "rgba(255,255,255,0.02)" : "rgba(17,17,19,0.028)";
     for (const header of [a.header, b.header]) {
       if (!header) continue;
       const [m11, m12, m21, m22] = header.cd;
       const det = m11 * m22 - m12 * m21;
       if (!det) continue;
-      const wDeg = header.naxis1 * header.plateScale;
-      const hDeg = header.naxis2 * header.plateScale;
-      const corner = (dRa: number, dDec: number) => {
-        const std = project(header.ra + dRa, header.dec + dDec, base.ra, base.dec);
-        return {
-          x: size.w / 2 + (std.x / halfW) * (size.w / 2),
-          y: size.h / 2 - (std.y / halfH) * (size.h / 2),
-        };
+      const corner = (col: number, row: number) => {
+        const inv = (header.naxis1 - 1) / header.naxis1;
+        const dx = col * inv - (header.crpix1 - 1);
+        const dy = row * inv - (header.crpix2 - 1);
+        const xi = (m22 * dx - m12 * dy) / det;
+        const eta = (-m21 * dx + m11 * dy) / det;
+        return screenOf(deproject(xi, eta, header.ra, header.dec));
       };
-      const tl = corner(-wDeg / 2, hDeg / 2);
-      const tr = corner(wDeg / 2, hDeg / 2);
-      const br = corner(wDeg / 2, -hDeg / 2);
-      const bl = corner(-wDeg / 2, -hDeg / 2);
+      const tl = corner(0, 0);
+      const tr = corner(header.naxis1 - 1, 0);
+      const br = corner(header.naxis1 - 1, header.naxis2 - 1);
+      const bl = corner(0, header.naxis2 - 1);
       ctx.save();
       ctx.beginPath();
       ctx.rect(0, 0, size.w, size.h);
@@ -471,7 +324,11 @@ export function SkyCanvas({
       ctx.closePath();
       ctx.fillStyle = wash;
       ctx.fill("evenodd");
-      ctx.strokeStyle = dark ? "rgba(255,255,255,0.24)" : "rgba(17,17,19,0.2)";
+      if (pattern) {
+        ctx.fillStyle = pattern;
+        ctx.fill("evenodd");
+      }
+      ctx.strokeStyle = dark ? "rgba(255,255,255,0.26)" : "rgba(17,17,19,0.22)";
       ctx.lineWidth = 1;
       ctx.setLineDash([2, 5]);
       ctx.beginPath();
@@ -483,8 +340,8 @@ export function SkyCanvas({
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.font = "9px ui-monospace, SFMono-Regular, Menlo, monospace";
-      ctx.fillStyle = dark ? "rgba(255,255,255,0.4)" : "rgba(17,17,19,0.35)";
-      ctx.fillText(`DETECTOR ${header.obsid.split("_").slice(-1)[0]}`, tl.x + 4, tl.y - 5);
+      ctx.fillStyle = dark ? "rgba(255,255,255,0.42)" : "rgba(17,17,19,0.35)";
+      ctx.fillText("SPHEREX DETECTOR", tl.x + 5, tl.y + 11);
       ctx.restore();
     }
 

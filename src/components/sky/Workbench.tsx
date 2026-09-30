@@ -639,6 +639,7 @@ function ChapterStage({ chapter }: { chapter: number }) {
  * ------------------------------------------------------------------ */
 
 const D2R = Math.PI / 180;
+const R2D = 180 / Math.PI;
 
 /** Where the field sits relative to the galactic plane and the ecliptic. */
 export function skyContext(ra: number, dec: number) {
@@ -646,49 +647,99 @@ export function skyContext(ra: number, dec: number) {
     Math.sin(dec * D2R) * Math.sin(27.13 * D2R) +
       Math.cos(dec * D2R) * Math.cos(27.13 * D2R) * Math.sin((ra - 192.86) * D2R),
   );
+  // Ecliptic longitude via a rotation of the equatorial frame by the obliquity.
   const lambda = Math.atan2(
-    Math.sin(ra * D2R) * Math.cos(23.44 * D2R) -
-      Math.tan(dec * D2R) * Math.sin(23.44 * D2R),
+    Math.sin(ra * D2R) * Math.cos(23.4392911 * D2R) -
+      Math.tan(dec * D2R) * Math.sin(23.4392911 * D2R),
     Math.cos(ra * D2R),
   );
   return {
     galacticLat: galactic / D2R,
-    eclipticLon: ((lambda / D2R) % 360 + 360) % 360,
+    eclipticLon: ((lambda * R2D) % 360 + 360) % 360,
   };
+}
+
+/**
+ * Mollweide projection of the whole celestial sphere, in a 0..100 box.
+ * The outline is the 2:1 ellipse every Mollweide map has, and the field marker,
+ * the celestial equator and the ecliptic all land in the right places relative
+ * to each other because they go through the same projection.
+ */
+const MW_RX = 49;
+const MW_RY = MW_RX / 2;
+
+function mollweide(ra: number, dec: number) {
+  const lambda = ((((ra + 180) % 360) - 180) * Math.PI) / 180;
+  const phi = (dec * Math.PI) / 180;
+  // Mollweide's auxiliary equation is 2θ + sin2θ = π sinφ. The left side rises
+  // monotonically over [0, π/2] (d/dθ = 4cos²θ), so bisect the magnitude and put
+  // the sign of φ back afterwards; a southern point would otherwise pin to the
+  // equator.
+  const target = Math.PI * Math.abs(Math.sin(phi));
+  let lo = 0;
+  let hi = Math.PI / 2;
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2;
+    if (2 * mid + Math.sin(2 * mid) < target) lo = mid;
+    else hi = mid;
+  }
+  const theta = Math.sign(phi) * ((lo + hi) / 2);
+  return {
+    x: 50 + (MW_RX / Math.PI) * lambda * Math.cos(theta),
+    y: 50 - MW_RY * Math.sin(theta),
+  };
+}
+
+/** Ecliptic latitude/longitude -> equatorial RA/Dec, for drawing the ecliptic. */
+function eclipticToEquatorial(lonDeg: number, latDeg: number) {
+  const l = lonDeg * D2R;
+  const b = latDeg * D2R;
+  const e = 23.4392911 * D2R;
+  const ra = Math.atan2(Math.sin(l) * Math.cos(e) - Math.tan(b) * Math.sin(e), Math.cos(l));
+  const dec = Math.asin(Math.sin(b) * Math.cos(e) + Math.cos(b) * Math.sin(e) * Math.sin(l));
+  return { ra: ((ra * R2D) % 360 + 360) % 360, dec: dec * R2D };
+}
+
+function polyline(points: { x: number; y: number }[], close = false) {
+  return points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ") + (close ? " Z" : "");
 }
 
 export function AllSkyLocator({ ra, dec }: { ra: number; dec: number }) {
   const ctx = skyContext(ra, dec);
-  // Orthographic projection of the whole celestial sphere, seen from the Sun.
-  const toXy = (r: number, d: number) => {
-    const visible = Math.sin(d * D2R) > 0;
-    return {
-      x: 50 + (r / 90) * Math.cos(d * D2R) * Math.sin((r - 90) * D2R) * 1.0,
-      y: 50 - (d / 90) * 0.9,
-      visible,
-    };
-  };
-  const { x, y, visible } = toXy(ra, dec);
+  const here = mollweide(ra, dec);
+
+  // The celestial equator, and the ecliptic as the track the four fields sit near.
+  const equator = Array.from({ length: 73 }, (_, i) => mollweide((i / 72) * 360 - 180, 0));
+  const ecliptic = Array.from({ length: 73 }, (_, i) => {
+    const p = eclipticToEquatorial((i / 72) * 360, 0);
+    return mollweide(p.ra, p.dec);
+  });
+  // RA ticks every two hours along the equator.
+  const ticks = Array.from({ length: 12 }, (_, i) => i * 2);
 
   return (
     <div className="space-y-3">
       <svg viewBox="0 0 100 100" className="w-full max-w-[220px]">
-        <circle cx="50" cy="50" r="48" className="fill-muted/40 stroke-border" strokeWidth="0.4" />
-        <ellipse cx="50" cy="50" rx="48" ry="12" className="fill-none stroke-border" strokeWidth="0.4" />
-        <ellipse cx="50" cy="50" rx="12" ry="48" className="fill-none stroke-border" strokeWidth="0.4" />
-        <circle cx="50" cy="50" r="3" className="fill-[#c2703d]/70" />
-        {visible && (
-          <>
-            <circle cx={x} cy={y} r="1.6" className="fill-[#c2703d]" />
-            <circle cx={x} cy={y} r="4" className="fill-none stroke-[#c2703d]" strokeWidth="0.3" />
-          </>
-        )}
-        <text x="50" y="4" textAnchor="middle" className="fill-muted-foreground" style={{ fontSize: "3.5px" }}>
-          N
-        </text>
-        <text x="50" y="99" textAnchor="middle" className="fill-muted-foreground" style={{ fontSize: "3.5px" }}>
-          S
-        </text>
+        <ellipse cx="50" cy="50" rx={MW_RX} ry={MW_RY} className="fill-muted/30 stroke-border" strokeWidth="0.4" />
+        <path d={polyline(equator, true)} fill="none" strokeWidth="0.4" className="stroke-border" />
+        <path d={polyline(ecliptic, true)} fill="none" strokeWidth="0.4" strokeDasharray="1.6 1.4" className="stroke-[#c2703d]/50" />
+        {ticks.map((h) => {
+          const p = mollweide(h * 15, 0);
+          return (
+            <text
+              key={h}
+              x={p.x}
+              y={p.y - 1.4}
+              textAnchor="middle"
+              className="fill-muted-foreground"
+              style={{ fontSize: "2.8px" }}
+            >
+              {h}h
+            </text>
+          );
+        })}
+        <circle cx={here.x} cy={here.y} r="4" className="fill-none stroke-[#c2703d]" strokeWidth="0.4" />
+        <circle cx={here.x} cy={here.y} r="1.5" className="fill-[#c2703d]" />
       </svg>
       <dl className="space-y-1 font-mono text-[10px] text-muted-foreground">
         <div className="flex justify-between">
@@ -699,13 +750,16 @@ export function AllSkyLocator({ ra, dec }: { ra: number; dec: number }) {
           <dt>ecliptic longitude</dt>
           <dd className="text-foreground">{ctx.eclipticLon.toFixed(1)}°</dd>
         </div>
-        {!visible && <dd className="text-amber-600">behind Earth — field is off the Sun-facing hemisphere</dd>}
+        <div className="flex justify-between">
+          <dt>position</dt>
+          <dd className="text-foreground">{dec >= 0 ? "north" : "south"} of the equator</dd>
+        </div>
       </dl>
     </div>
   );
 }
 
-/* Small helper reused by the dashboard header. */
+/* Discovery logbook, persisted locally and exportable. */
 export function useDiscoveryLog() {
   const [entries, setEntries] = useState<Discovery[]>([]);
   const hydrated = useRef(false);

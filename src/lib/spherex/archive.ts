@@ -163,6 +163,46 @@ export async function readPlane(
 }
 
 /* ------------------------------------------------------------------ *
+ * Detector geometry.
+ *
+ * The exposures are square, 3.48° on a side, and rolled by the spacecraft attitude
+ * — about 22° for these pointings. A square of that size seen through a gnomonic
+ * projection is a rotated square, so it does not fill a wide canvas edge to edge:
+ * fitting the 3.48° side leaves half the viewport looking like empty black, which
+ * is exactly what a citizen reads as "the map is broken". Fitting the rotated
+ * bounding box instead puts the whole footprint on screen.
+ * ------------------------------------------------------------------ */
+
+export type DetectorGeometry = {
+  /** Side of the square footprint, degrees. */
+  sideDeg: number;
+  /** Width and height of the footprint's axis-aligned bounding box, degrees. */
+  bboxDeg: number;
+};
+
+export function detectorGeometry(header: SpherexHeader): DetectorGeometry {
+  const [c11, c12, c21, c22] = header.cd;
+  const scale = Math.sqrt(Math.abs(c11 * c22 - c12 * c21));
+  const sideDeg = header.naxis1 * scale;
+  // Direction of the detector's own RA axis in the tangent plane.
+  const theta = Math.atan2(c21, c11);
+  const reach = Math.abs(Math.cos(theta)) + Math.abs(Math.sin(theta));
+  return { sideDeg, bboxDeg: sideDeg * reach };
+}
+
+/**
+ * The vertical field of view that shows the whole footprint in a viewport of the
+ * given aspect ratio. The footprint's bounding box is square, so a viewport needs
+ * its short side to be at least the box: on a wide window that is the height.
+ * This is both the default view and the zoom-out limit, because past it the only
+ * thing on screen is empty canvas.
+ */
+export function fitFovDeg(header: SpherexHeader, aspect: number) {
+  const { bboxDeg } = detectorGeometry(header);
+  return aspect >= 1 ? bboxDeg : bboxDeg / aspect;
+}
+
+/* ------------------------------------------------------------------ *
  * Caching. A field has four epochs and the citizen will flip between
  * them constantly, so a decoded 510x510 plane is worth keeping.
  * ------------------------------------------------------------------ */

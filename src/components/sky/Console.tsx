@@ -1,9 +1,9 @@
 import { useAction } from "convex/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { loadHeader, loadPlane, type SkyPlane, type SpherexHeader } from "@/lib/spherex/archive";
-import { daysBetween, formatAngle, formatDec, formatRa, project, separation } from "@/lib/spherex/astro";
-import { FIELDS, getField, type SurveyEpoch } from "@/lib/spherex/fields";
+import { formatAngle, formatDec, formatRa, project, separation } from "@/lib/spherex/astro";
+import { FIELDS, baselineDays, getField, type SurveyEpoch } from "@/lib/spherex/fields";
 import { apparentMagnitude, motionOf, type Mover } from "@/lib/spherex/movers";
 import { SkyCanvas, type Compare, type Tone, type View } from "@/components/sky/SkyCanvas";
 import {
@@ -256,7 +256,7 @@ export default function Console() {
   const [follow, setFollow] = useState(false);
   const [onlyInFrame, setOnlyInFrame] = useState(false);
   const [band, setBand] = useState(28);
-  const [view, setView] = useState<View>({ ra: epochA.ra, dec: epochA.dec, fovDeg: 3.48 });
+  const [view, setView] = useState<View>({ ra: epochA.ra, dec: epochA.dec, fovDeg: 3.5 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [tourOpen, setTourOpen] = useState(false);
@@ -289,15 +289,34 @@ export default function Console() {
 
   const epoch1 = epochA.date;
   const epoch2 = epochB.date;
-  const baselineDays = Math.max(1, daysBetween(epoch1, epoch2));
+  const baseline = baselineDays(field, aIdx, bIdx);
 
   /**
-   * The sky the exposures actually cover, from the live header: 2040 pixels at
-   * about 6.14 arcsec is 3.48 degrees. Zooming out past that only ever reveals
-   * empty canvas, so it is not offered.
+   * The sky the exposures actually cover. SPHEREx's detector is a 3.48° square held
+   * at an angle to the sky, so the canvas reports the field of view that shows the
+   * whole footprint and the limit past which there is nothing left to show. Without
+   * this the default view fits the square's side and leaves most of the canvas black.
    */
-  const detectorFov = header ? header.naxis1 * header.plateScale : 3.48;
-  const maxFov = detectorFov * 1.06;
+  const [geometry, setGeometry] = useState({ fitFov: 3.5, maxFov: 4 });
+  const onGeometry = useCallback((g: { fitFov: number; maxFov: number }) => {
+    setGeometry((prev) =>
+      Math.abs(prev.fitFov - g.fitFov) < 1e-3 && Math.abs(prev.maxFov - g.maxFov) < 1e-3
+        ? prev
+        : g,
+    );
+  }, []);
+
+  // Once the header lands, frame the whole footprint.
+  const framedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!header) return;
+    const id = header.key;
+    if (framedFor.current === id) return;
+    framedFor.current = id;
+    setView((v) => ({ ...v, fovDeg: geometry.fitFov }));
+  }, [header, geometry.fitFov]);
+
+  const maxFov = geometry.maxFov;
 
   /* --- real ephemerides ------------------------------------------------- */
   const designations = useMemo(() => field.members.map((m) => m.designation), [field]);
@@ -344,7 +363,7 @@ export default function Console() {
   }, [playing, intervalMs]);
 
   const selected = movers.find((m) => m.id === selectedId) ?? null;
-  const motion = selected ? motionOf(selected, baselineDays) : null;
+  const motion = selected ? motionOf(selected, baseline) : null;
 
   const focusMover = useCallback(
     (m: Mover) => {
@@ -537,7 +556,7 @@ export default function Console() {
           <Rail
             title="Survey epochs"
             action={
-              <span className="font-mono text-[10px] text-[var(--deck-dim)]">+{baselineDays} d</span>
+              <span className="font-mono text-[10px] text-[var(--deck-dim)]">+{baseline} d</span>
             }
           >
             <div className="mb-3 space-y-px overflow-hidden rounded-md border border-[var(--deck-line)]">
@@ -596,7 +615,7 @@ export default function Console() {
               rows={[
                 ["epoch A", `${epoch1} · ${epochA.visit}`],
                 ["epoch B", `${epoch2} · ${epochB.visit}`],
-                ["baseline", `${baselineDays} days`],
+                ["baseline", `${baseline} days`],
               ]}
             />
             {compare === "blink" && (
@@ -682,6 +701,7 @@ export default function Console() {
             selectedId={selectedId}
             onSelect={setSelectedId}
             onViewChange={setView}
+            onGeometry={onGeometry}
             showGrid={showGrid}
             busy={status !== "ready" && status !== "error"}
           />
@@ -718,8 +738,8 @@ export default function Console() {
               <Grid3x3 className="size-3.5" />
             </IconButton>
             <IconButton
-              onClick={() => setView({ ra: centre.ra, dec: centre.dec, fovDeg: detectorFov })}
-              label="Reset view"
+              onClick={() => setView({ ra: centre.ra, dec: centre.dec, fovDeg: geometry.fitFov })}
+              label="Frame the whole detector"
             >
               <RotateCcw className="size-3.5" />
             </IconButton>
@@ -849,7 +869,7 @@ export default function Console() {
           epoch1={epoch1}
           epoch2={epoch2}
           field={{ id: field.id, name: field.name }}
-          baselineDays={baselineDays}
+          baselineDays={baseline}
           onSave={(d) => updateDiscoveries([d, ...entries])}
         />
       )}
