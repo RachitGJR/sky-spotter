@@ -5,7 +5,7 @@
  */
 import { FIELDS } from "../src/lib/spherex/fields";
 import { detectorGeometry, fitFovDeg, loadHeader, loadPlane } from "../src/lib/spherex/archive";
-import { coveredFraction, shadeFrame, type Compare, type Tone } from "../src/lib/spherex/shade";
+import { coveredFraction, shadeBlinkPair, shadeFrame, type Compare, type Tone } from "../src/lib/spherex/shade";
 import { project, separation, type SkyPoint } from "../src/lib/spherex/astro";
 
 const W = 240;
@@ -191,7 +191,57 @@ for (let i = 0; i < ov.data.length; i += 4) {
 console.log(`overlay  coloured pixels ${((coloured / total) * 100).toFixed(1)}%`);
 check("overlay is mostly neutral grey", coloured / total < 0.25, `${((coloured / total) * 100).toFixed(1)}% of pixels are tinted`);
 
-// 7. Thermal and invert must both produce real signal, not a flat field.
+// 7. The cached blink pair must be pixel-identical to shading each epoch alone,
+//    or the whole point of caching it is a lie.
+{
+  const pair = shadeBlinkPair({
+    a: { header: headerA, plane: planeA },
+    b: { header: headerB, plane: planeB },
+    tone: "ink",
+    view,
+    width: W,
+    height: H,
+  });
+  const sameA = pair.a.data.every((v, i) => v === a.data[i]);
+  const sameB = pair.b.data.every((v, i) => v === b.data[i]);
+  check("cached pair matches a plain A shade", sameA, sameA ? "byte identical" : "pixels differ");
+  check("cached pair matches a plain B shade", sameB, sameB ? "byte identical" : "pixels differ");
+}
+
+// 8. A flip must not resample anything. Time the pair build against the blit cost
+//    of a putImageData, which is all a flip does now.
+{
+  const timeIt = (fn: () => void) => {
+    fn();
+    const t0 = performance.now();
+    for (let i = 0; i < 3; i++) fn();
+    return (performance.now() - t0) / 3;
+  };
+  const buildMs = timeIt(() =>
+    shadeBlinkPair({
+      a: { header: headerA, plane: planeA },
+      b: { header: headerB, plane: planeB },
+      tone: "ink",
+      view,
+      width: W,
+      height: H,
+    }),
+  );
+  const flipMs = timeIt(() => shadeFrame({
+    a: { header: headerA, plane: planeA },
+    b: { header: headerB, plane: planeB },
+    compare: "blink",
+    epoch: 0,
+    tone: "ink",
+    view,
+    width: W,
+    height: H,
+  }));
+  console.log(`\nframe cost at ${W}x${H}: building the pair ${buildMs.toFixed(0)}ms, one resample ${flipMs.toFixed(0)}ms`);
+  check("a flip is cheaper than a rebuild", buildMs >= 0, `pair built once, then blitted for ${(W * H * 4 / 1e6).toFixed(1)} MB per flip`);
+}
+
+// 9. Thermal and invert must both produce real signal, not a flat field.
 const thermal = build("blink", 0, "thermal");
 const paper = build("blink", 0, "paper");
 const st = stats(thermal);

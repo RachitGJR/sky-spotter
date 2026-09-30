@@ -10,7 +10,7 @@
     "format": "prettier --write .",
     "preview": "vite preview",
     "check": "bun run scripts/check-all.ts",
-    "check:live": "bun run scripts/check-wcs.ts && bun run scripts/check-epochs.mjs && bun run scripts/check-epoch-pairs.mjs && bun run scripts/check-render.ts"
+    "check:live": "bun run scripts/check-wcs.ts && bun run scripts/check-epochs.mjs && bun run scripts/check-epoch-pairs.mjs && bun run scripts/check-render.ts && bun run scripts/check-examples.mjs"
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.90",

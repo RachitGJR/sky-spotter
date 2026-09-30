@@ -241,3 +241,75 @@ export function coveredFraction(frame: Frame, bg: [number, number, number]) {
   }
   return covered / (frame.width * frame.height);
 }
+
+/**
+ * Both blink frames in one pass.
+ *
+ * A flip used to resample the whole sky from scratch, which at 1.4 megapixels costs
+ * about a quarter of a second and shows up as a freeze on every blink. The two
+ * frames are the same view of two exposures, so the expensive part — turning each
+ * output pixel back into a sky position — is shared. Build the pair once when the
+ * view settles and a flip becomes a blit.
+ */
+export function shadeBlinkPair(opts: {
+  a: EpochPixels | null;
+  b: EpochPixels | null;
+  tone: Tone;
+  view: View;
+  width: number;
+  height: number;
+}): { a: Frame; b: Frame } {
+  const { a, b, tone, view, width: w, height: h } = opts;
+  const shadeA = a ? makeShade(a.header, a.plane) : null;
+  const shadeB = b ? makeShade(b.header, b.plane) : null;
+  const outA = new Uint8ClampedArray(new ArrayBuffer(w * h * 4));
+  const outB = new Uint8ClampedArray(new ArrayBuffer(w * h * 4));
+  if (w < 1 || h < 1) {
+    const empty = { data: outA, width: w, height: h };
+    return { a: empty, b: { data: outB, width: w, height: h } };
+  }
+
+  const dark = tone !== "paper";
+  const bgR = dark ? 14 : 244;
+  const bgG = dark ? 14 : 243;
+  const bgB = dark ? 16 : 240;
+  const aspect = w / h;
+  const halfH = view.fovDeg / 2;
+  const halfW = halfH * aspect;
+  const stepX = (2 * halfW) / w;
+  const stepY = (2 * halfH) / h;
+
+  const write = (out: Uint8ClampedArray, i: number, level: number) => {
+    if (level < 0) {
+      out[i] = bgR;
+      out[i + 1] = bgG;
+      out[i + 2] = bgB;
+    } else if (tone === "thermal") {
+      const c = thermalColour(level);
+      out[i] = c[0];
+      out[i + 1] = c[1];
+      out[i + 2] = c[2];
+    } else {
+      const v = dark ? Math.round(255 * level) : 255 - Math.round(255 * level);
+      out[i] = v;
+      out[i + 1] = v;
+      out[i + 2] = dark ? v : Math.max(0, v - 3);
+    }
+    out[i + 3] = 255;
+  };
+
+  let i = 0;
+  for (let y = 0; y < h; y++) {
+    const yStd = halfH - (y + 0.5) * stepY;
+    for (let x = 0; x < w; x++) {
+      const sky = deproject(-halfW + (x + 0.5) * stepX, yStd, view.ra, view.dec);
+      write(outA, i, shadeA ? levelOf(shadeA, shadeA.toIndex(sky.ra, sky.dec)) : -1);
+      write(outB, i, shadeB ? levelOf(shadeB, shadeB.toIndex(sky.ra, sky.dec)) : -1);
+      i += 4;
+    }
+  }
+  return {
+    a: { data: outA, width: w, height: h },
+    b: { data: outB, width: w, height: h },
+  };
+}

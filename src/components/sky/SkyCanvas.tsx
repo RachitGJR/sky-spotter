@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deproject, formatDec, formatRa, project, type SkyPoint } from "@/lib/spherex/astro";
 import type { SkyPlane, SpherexHeader } from "@/lib/spherex/archive";
 import type { Mover } from "@/lib/spherex/movers";
-import { shadeFrame, type Compare, type Tone, type View } from "@/lib/spherex/shade";
+import { shadeBlinkPair, shadeFrame, type Compare, type Tone, type View } from "@/lib/spherex/shade";
 import { fitFovDeg } from "@/lib/spherex/archive";
+import { MoverInset } from "@/components/sky/MoverInset";
 
 export type { Compare, Tone, View };
 
@@ -28,6 +29,9 @@ type Props = {
   movers: Mover[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  /** ISO dates of the two exposures, shown on the inset. */
+  aDate: string;
+  bDate: string;
   onViewChange: (view: View) => void;
   /**
    * The canvas owns its own geometry, so it reports the view that shows the whole
@@ -70,14 +74,19 @@ export function SkyCanvas({
   movers,
   selectedId,
   onSelect,
+  aDate,
+  bDate,
   onViewChange,
   onGeometry,
   showGrid,
   busy,
 }: Props) {
+  const selected = movers.find((m) => m.id === selectedId) ?? null;
   const wrapRef = useRef<HTMLDivElement>(null);
   const skyCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
+  /** The graticule layer, a real stacked canvas rather than an offscreen blit. */
+  const backdropRef = useRef<HTMLCanvasElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; view: View } | null>(null);
   const draggedRef = useRef(false);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -88,6 +97,8 @@ export function SkyCanvas({
    */
   const drawnRef = useRef<View | null>(null);
   const [drawn, setDrawn] = useState<View | null>(null);
+  /** Pre-shaded frames, so a blink flip costs a blit instead of a resample. */
+  const framesRef = useRef<{ a: ImageData | null; b: ImageData | null }>({ a: null, b: null });
 
   const zoomOutMax = useMemo(() => {
     const header = a.header ?? b.header;
@@ -151,22 +162,52 @@ export function SkyCanvas({
     const scale = Math.min(dpr, Math.max(0.5, cap));
     const w = Math.max(1, Math.round(size.w * scale));
     const h = Math.max(1, Math.round(size.h * scale));
-    const frame = shadeFrame({
-      a: epochA,
-      b: epochB,
-      compare,
-      epoch,
-      tone,
-      view: drawn,
-      width: w,
-      height: h,
-    });
-    canvas.width = w;
-    canvas.height = h;
+
+    // Blink needs both exposures; every other mode is a single frame that does not
+    // change when the epoch flips. Either way the expensive work happens here, once
+    // the view settles, and never on a flip.
+    if (compare === "blink") {
+      const pair = shadeBlinkPair({ a: epochA, b: epochB, tone, view: drawn, width: w, height: h });
+      framesRef.current = {
+        a: new ImageData(pair.a.data, pair.a.width, pair.a.height),
+        b: new ImageData(pair.b.data, pair.b.width, pair.b.height),
+      };
+    } else {
+      const frame = shadeFrame({
+        a: epochA,
+        b: epochB,
+        compare,
+        epoch: 0,
+        tone,
+        view: drawn,
+        width: w,
+        height: h,
+      });
+      framesRef.current = { a: new ImageData(frame.data, frame.width, frame.height), b: null };
+    }
+
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.putImageData(new ImageData(frame.data, frame.width, frame.height), 0, 0);
-  }, [a.header, a.plane, b.header, b.plane, drawn, tone, compare, epoch, size]);
+    const ready = framesRef.current;
+    ctx.putImageData(epoch === 0 ? (ready.a as ImageData) : (ready.b ?? (ready.a as ImageData)), 0, 0);
+  }, [a.header, a.plane, b.header, b.plane, drawn, tone, compare, size]);
+
+  // A flip in blink mode is a blit of an already-shaded frame. In the other modes
+  // the frame does not depend on the epoch at all, so there is nothing to redraw.
+  useEffect(() => {
+    if (compare !== "blink" || !drawn) return;
+    const canvas = skyCanvasRef.current;
+    const ready = framesRef.current;
+    if (!canvas || !ready) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const frame = epoch === 0 ? ready.a : (ready.b ?? ready.a);
+    if (frame) ctx.putImageData(frame, 0, 0);
+  }, [epoch, compare, drawn, size]);
 
   /**
    * The live transform that carries the previous frame under the pointer while the
@@ -205,37 +246,44 @@ export function SkyCanvas({
     [drawn, view, size],
   );
 
+  /**
+   * A faint diagonal hatch marks the part of the canvas the exposures do not
+   * cover. SPHEREx's detector is a square held at an angle, so on a wide window
+   * the corners are always empty; hatching says "no data here" instead of leaving
+   * them looking like a broken render. Built once per tone, not once per flip.
+   */
+  const hatchPattern = useMemo(() => {
+    const tile = document.createElement("canvas");
+    tile.width = 8;
+    tile.height = 8;
+    const ctx = tile.getContext("2d");
+    if (!ctx) return null;
+    ctx.strokeStyle = tone === "paper" ? "rgba(17,17,19,0.14)" : "rgba(255,255,255,0.10)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-2, 10);
+    ctx.lineTo(10, -2);
+    ctx.moveTo(2, 14);
+    ctx.lineTo(14, 2);
+    ctx.stroke();
+    return tile;
+  }, [tone]);
+
+  /**
+   * The graticule, scale bar, detector outlines and split divider. None of it
+   * depends on which epoch is showing, so it is drawn once into an offscreen canvas
+   * and blitted. A blink flip then only redraws the handful of markers.
+   */
   useEffect(() => {
-    const canvas = overlayRef.current;
-    if (!canvas || size.w < 8) return;
+    const canvas = backdropRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!ctx || !canvas || size.w < 8) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     canvas.width = Math.round(size.w * dpr);
     canvas.height = Math.round(size.h * dpr);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.w, size.h);
-
-    // A faint diagonal hatch marks the part of the canvas the exposures do not
-    // cover. SPHEREx's detector is a square held at an angle, so on a wide window
-    // the corners are always empty; hatching says "no data here" instead of
-    // leaving them looking like a broken render.
-    const hatch = document.createElement("canvas");
-    hatch.width = 8;
-    hatch.height = 8;
-    const hctx = hatch.getContext("2d");
-    let pattern: CanvasPattern | null = null;
-    if (hctx) {
-      hctx.strokeStyle = tone === "paper" ? "rgba(17,17,19,0.14)" : "rgba(255,255,255,0.10)";
-      hctx.lineWidth = 1;
-      hctx.beginPath();
-      hctx.moveTo(-2, 10);
-      hctx.lineTo(10, -2);
-      hctx.moveTo(2, 14);
-      hctx.lineTo(14, 2);
-      hctx.stroke();
-      pattern = ctx.createPattern(hatch, "repeat");
-    }
+    const pattern = hatchPattern;
 
     const base = drawn ?? view;
     const dark = tone !== "paper";
@@ -325,8 +373,11 @@ export function SkyCanvas({
       ctx.fillStyle = wash;
       ctx.fill("evenodd");
       if (pattern) {
-        ctx.fillStyle = pattern;
-        ctx.fill("evenodd");
+        const hatch = ctx.createPattern(pattern, "repeat");
+        if (hatch) {
+          ctx.fillStyle = hatch;
+          ctx.fill("evenodd");
+        }
       }
       ctx.strokeStyle = dark ? "rgba(255,255,255,0.26)" : "rgba(17,17,19,0.22)";
       ctx.lineWidth = 1;
@@ -358,7 +409,39 @@ export function SkyCanvas({
       ctx.fillText(a.short, mx - 12, size.h - 28);
       ctx.fillText(b.short, mx + 12, size.h - 28);
     }
+  }, [
+    drawn,
+    view,
+    size,
+    tone,
+    compare,
+    showGrid,
+    a.header,
+    b.header,
+    a.short,
+    b.short,
+    screenOf,
+    hatchPattern,
+  ]);
 
+  /** Blit the cached backdrop, then draw only what the current epoch changes. */
+  useEffect(() => {
+    const canvas = overlayRef.current;
+    if (!canvas || size.w < 8) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (canvas.width !== Math.round(size.w * dpr) || canvas.height !== Math.round(size.h * dpr)) {
+      canvas.width = Math.round(size.w * dpr);
+      canvas.height = Math.round(size.h * dpr);
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // The graticule lives on its own stacked canvas, so a flip only clears and
+    // redraws the handful of markers rather than re-blitting a full-size layer.
+    ctx.clearRect(0, 0, size.w, size.h);
+
+    const dark = tone !== "paper";
+    const label = dark ? "rgba(255,255,255,0.55)" : "rgba(17,17,19,0.5)";
     const showVectors = compare === "blink" || compare === "split";
     for (const mover of movers) {
       const pa = mover.epoch1;
@@ -499,6 +582,7 @@ export function SkyCanvas({
         style={{ transform: transform || undefined }}
       >
         <canvas ref={skyCanvasRef} className="absolute inset-0 size-full" />
+        <canvas ref={backdropRef} className="pointer-events-none absolute inset-0 size-full" />
         <canvas
           ref={overlayRef}
           onClick={handleClick}
@@ -520,6 +604,20 @@ export function SkyCanvas({
           </div>
         )}
       </div>
+
+      {selected && (
+        <MoverInset
+          a={{ header: a.header, plane: a.plane }}
+          b={{ header: b.header, plane: b.plane }}
+          mover={selected}
+          epoch={epoch}
+          tone={tone}
+          aLabel={a.short}
+          bLabel={b.short}
+          aDate={aDate}
+          bDate={bDate}
+        />
+      )}
     </div>
   );
 }

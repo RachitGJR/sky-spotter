@@ -4,6 +4,7 @@ import { api } from "@/convex/_generated/api";
 import { loadHeader, loadPlane, type SkyPlane, type SpherexHeader } from "@/lib/spherex/archive";
 import { formatAngle, formatDec, formatRa, project, separation } from "@/lib/spherex/astro";
 import { FIELDS, baselineDays, getField, type SurveyEpoch } from "@/lib/spherex/fields";
+import { EXAMPLES, getExample, type Example } from "@/lib/spherex/examples";
 import { apparentMagnitude, motionOf, type Mover } from "@/lib/spherex/movers";
 import { SkyCanvas, type Compare, type Tone, type View } from "@/components/sky/SkyCanvas";
 import {
@@ -184,6 +185,25 @@ const COMPARE_MODES: { id: Compare; label: string; hint: string }[] = [
   { id: "diff", label: "Diff", hint: "B minus A; a mover shows as a bright/dark pair" },
 ];
 
+/** The three beats a worked example walks through, in order. */
+const DEMO_BEATS: { mode: Compare; caption: string; seconds: number }[] = [
+  {
+    mode: "split",
+    caption: "Same patch of sky, photographed twice. The stars line up across the divider. The dot does not.",
+    seconds: 4,
+  },
+  {
+    mode: "blink",
+    caption: "Now blink them. Stars hold still. That is the entire experiment — you are doing it.",
+    seconds: 5,
+  },
+  {
+    mode: "diff",
+    caption: "Difference of the two. The moving body shows as a bright blob with a dark one beside it.",
+    seconds: 4,
+  },
+];
+
 /** Loads one real exposure, keyed by object key and cached in the archive module. */
 function useExposure(epoch: SurveyEpoch | undefined) {
   const [header, setHeader] = useState<SpherexHeader | null>(null);
@@ -273,10 +293,45 @@ export default function Console() {
     document.documentElement.classList.add("dark");
   }, []);
 
+  /* --- worked examples --------------------------------------------------- */
+  // A first-time citizen has four fields, sixteen exposures and no reason to look at
+  // any of them. Each example is a real body with motion measured by JPL, and
+  // "Show me" loads the field and epoch pair that show it, then walks the three ways
+  // of looking at the same two exposures.
+  const [exampleId, setExampleId] = useState<string | null>(null);
+  const [demoBeat, setDemoBeat] = useState<number | null>(null);
+  const activeExample = exampleId ? getExample(exampleId) : null;
+  // runExample parks the pair here so the field-change effect below re-applies it
+  // instead of resetting to the first two epochs.
+  const examplePair = useRef<Example | null>(null);
+
+  const runExample = useCallback((example: Example) => {
+    setExampleId(example.id);
+    setFieldId(example.fieldId);
+    examplePair.current = example;
+    setAIdx(Math.min(example.a, getField(example.fieldId).epochs.length - 1));
+    setBIdx(Math.min(example.b, getField(example.fieldId).epochs.length - 1));
+    setCompare(DEMO_BEATS[0].mode);
+    setPlaying(true);
+    setFollow(false);
+    setDemoBeat(0);
+  }, []);
+
   // Frame the field whenever the citizen switches fields, and centre on the midpoint
   // of the two selected exposures so neither sits off the edge of the canvas.
+  // Switching fields by hand drops any running example; switching because an example
+  // asked for it keeps the pair the example asked for.
   useEffect(() => {
     setSelectedId(null);
+    const ex = examplePair.current;
+    examplePair.current = null;
+    if (ex && ex.fieldId === field.id) {
+      setAIdx(Math.min(ex.a, field.epochs.length - 1));
+      setBIdx(Math.min(ex.b, field.epochs.length - 1));
+      return;
+    }
+    setExampleId(null);
+    setDemoBeat(null);
     setAIdx(0);
     setBIdx(Math.min(1, field.epochs.length - 1));
   }, [field]);
@@ -362,8 +417,30 @@ export default function Console() {
     return () => window.clearInterval(id);
   }, [playing, intervalMs]);
 
-  const selected = movers.find((m) => m.id === selectedId) ?? null;
+  // Selecting the body is what the inset and the target card key off, so a worked
+  // example falls back to the field's own member as soon as its ephemeris lands.
+  // Derived rather than stored, so no effect has to push a selection into state.
+  const effectiveSelectedId =
+    selectedId ?? (activeExample && movers.length ? movers[0].id : null);
+  const selected = movers.find((m) => m.id === effectiveSelectedId) ?? null;
   const motion = selected ? motionOf(selected, baseline) : null;
+
+  // Advance the demo through its beats, then hand control back. Each step sets the
+  // next mode from inside the timer rather than from the effect body, so the effect
+  // only ever schedules.
+  useEffect(() => {
+    if (demoBeat === null) return;
+    const beat = DEMO_BEATS[demoBeat];
+    if (!beat) return;
+    const id = window.setTimeout(() => {
+      const next = demoBeat + 1;
+      // Done: leave the citizen blinking, which is the thing worth doing.
+      setCompare(next < DEMO_BEATS.length ? DEMO_BEATS[next].mode : "blink");
+      setDemoBeat(next < DEMO_BEATS.length ? next : null);
+    }, beat.seconds * 1000);
+    return () => window.clearTimeout(id);
+  }, [demoBeat]);
+
 
   const focusMover = useCallback(
     (m: Mover) => {
@@ -451,6 +528,13 @@ export default function Console() {
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-1">
+          <GhostButton
+            onClick={() => runExample(EXAMPLES[0])}
+            title="Load a worked example with a known moving body"
+          >
+            <Play className="mr-1.5 inline size-3.5" />
+            Example
+          </GhostButton>
           <GhostButton onClick={() => setTourOpen(true)} title="Guided walkthrough">
             <GraduationCap className="mr-1.5 inline size-3.5" />
             Tour
@@ -487,6 +571,68 @@ export default function Console() {
             </p>
             <p className="mt-2.5 text-[12px] leading-relaxed text-[var(--deck-dim)]">{field.blurb}</p>
           </div>
+
+          <Rail
+            title="Worked examples"
+            action={
+              activeExample ? (
+                <button
+                  onClick={() => {
+                    setExampleId(null);
+                    setDemoBeat(null);
+                  }}
+                  className="font-mono text-[10px] text-[var(--deck-dim)] hover:text-[var(--deck-text)]"
+                >
+                  clear
+                </button>
+              ) : (
+                <span className="font-mono text-[10px] text-[var(--deck-dim)]">{EXAMPLES.length} real bodies</span>
+              )
+            }
+          >
+            <p className="mb-3 text-[11px] leading-relaxed text-[var(--deck-dim)]">
+              Every one of these is a real SPHEREx field with a real body in it, and
+              every separation was measured from the two exposures' own dates. Pick one
+              and it loads the field, picks the epoch pair and shows you the motion.
+            </p>
+            <div className="space-y-px overflow-hidden rounded-md border border-[var(--deck-line)]">
+              {EXAMPLES.map((ex) => {
+                const f = getField(ex.fieldId);
+                const aDate = f.epochs[Math.min(ex.a, f.epochs.length - 1)].date;
+                const bDate = f.epochs[Math.min(ex.b, f.epochs.length - 1)].date;
+                const isActive = activeExample?.id === ex.id;
+                return (
+                  <div
+                    key={ex.id}
+                    className={`px-3 py-2.5 transition-colors ${
+                      isActive ? "bg-[var(--deck-raised)]" : "hover:bg-[var(--deck-raised)]/60"
+                    }`}
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="truncate text-[11px] text-[var(--deck-text)]">
+                        {f.members[0]?.label ?? ex.fieldId}
+                      </span>
+                      <span className="shrink-0 font-mono text-[10px] text-[var(--deck-accent)]">
+                        {ex.sepDeg >= 1 ? `${ex.sepDeg.toFixed(2)}°` : `${(ex.sepDeg * 60).toFixed(1)}′`}
+                        <span className="text-[var(--deck-dim)]"> / {ex.days} d</span>
+                      </span>
+                    </div>
+                    <p className="mt-0.5 font-mono text-[9px] text-[var(--deck-dim)]">
+                      {f.name} · {aDate} → {bDate}
+                    </p>
+                    {isActive && (
+                      <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--deck-muted)]">{ex.why}</p>
+                    )}
+                    <div className="mt-2">
+                      <GhostButton active={isActive} onClick={() => runExample(ex)}>
+                        {isActive ? "Show me again" : "Show me"}
+                      </GhostButton>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Rail>
 
           <Rail title="Target field">
             <div className="mb-4 space-y-px overflow-hidden rounded-md border border-[var(--deck-line)]">
@@ -698,13 +844,35 @@ export default function Console() {
             tone={tone}
             epoch={epoch}
             movers={visible}
-            selectedId={selectedId}
+            selectedId={effectiveSelectedId}
             onSelect={setSelectedId}
             onViewChange={setView}
             onGeometry={onGeometry}
+            aDate={epoch1}
+            bDate={epoch2}
             showGrid={showGrid}
             busy={status !== "ready" && status !== "error"}
           />
+
+          {activeExample && (
+            <div className="pointer-events-none absolute inset-x-0 top-14 flex justify-center px-6">
+              <div className="max-w-[560px] rounded-md border border-[var(--deck-line)] px-4 py-2.5 text-center" style={{ background: "var(--deck-panel)" }}>
+                <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--deck-accent)]">
+                  Example · {getField(activeExample.fieldId).members[0]?.label ?? activeExample.fieldId}
+                </p>
+                <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--deck-text)]">
+                  {demoBeat !== null && DEMO_BEATS[demoBeat]
+                    ? DEMO_BEATS[demoBeat].caption
+                    : activeExample.why}
+                </p>
+                {demoBeat !== null && (
+                  <p className="mt-1.5 font-mono text-[9px] text-[var(--deck-dim)]">
+                    step {demoBeat + 1} of {DEMO_BEATS.length} · {DEMO_BEATS[demoBeat]?.mode}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="pointer-events-none absolute left-5 top-5 font-mono text-[10px] text-[var(--deck-dim)]">
             <p>α {formatRa(centre.ra)}</p>

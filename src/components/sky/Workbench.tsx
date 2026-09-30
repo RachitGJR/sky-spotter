@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -358,6 +358,10 @@ export function useSound() {
 
 const TOUR_STEPS = [
   {
+    title: "Start from a worked example",
+    body: "If you would rather not hunt, open Worked examples in the left rail. Five real bodies, five real epoch pairs, every separation measured from those exposures' own dates. Press Show me and the console loads the field, picks the pair and walks you through split, blink and difference in turn.",
+  },
+  {
     title: "Pick a field",
     body: "Each field is a patch of sky SPHEREx really photographed, about 3.5° across. Switch between them at the top.",
   },
@@ -375,7 +379,7 @@ const TOUR_STEPS = [
   },
   {
     title: "Read the motion",
-    body: "Select the body. You get real coordinates at both dates, how far it moved and how fast it was closing.",
+    body: "Select the body and the magnified inset at bottom right crops to its movement: epoch A on the left, epoch B on the right, the body ringed in each. You also get real coordinates at both dates, how far it moved and how fast it was closing.",
   },
   {
     title: "Log the discovery",
@@ -704,26 +708,34 @@ function polyline(points: { x: number; y: number }[], close = false) {
   return points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ") + (close ? " Z" : "");
 }
 
-export function AllSkyLocator({ ra, dec }: { ra: number; dec: number }) {
-  const ctx = skyContext(ra, dec);
-  const here = mollweide(ra, dec);
-
-  // The celestial equator, and the ecliptic as the track the four fields sit near.
-  const equator = Array.from({ length: 73 }, (_, i) => mollweide((i / 72) * 360 - 180, 0));
-  const ecliptic = Array.from({ length: 73 }, (_, i) => {
+// The graticule never changes, and the locator sits in a rail that re-renders on
+// every blink flip, so the two long polylines are built once at module load rather
+// than 146 Mollweide inversions per flip.
+const MW_EQUATOR = polyline(
+  Array.from({ length: 73 }, (_, i) => mollweide((i / 72) * 360 - 180, 0)),
+  true,
+);
+const MW_ECLIPTIC = polyline(
+  Array.from({ length: 73 }, (_, i) => {
     const p = eclipticToEquatorial((i / 72) * 360, 0);
     return mollweide(p.ra, p.dec);
-  });
-  // RA ticks every two hours along the equator.
-  const ticks = Array.from({ length: 12 }, (_, i) => i * 2);
+  }),
+  true,
+);
+
+const MW_TICKS = Array.from({ length: 12 }, (_, i) => i * 2);
+
+export const AllSkyLocator = memo(function AllSkyLocator({ ra, dec }: { ra: number; dec: number }) {
+  const ctx = skyContext(ra, dec);
+  const here = mollweide(ra, dec);
 
   return (
     <div className="space-y-3">
       <svg viewBox="0 0 100 100" className="w-full max-w-[220px]">
         <ellipse cx="50" cy="50" rx={MW_RX} ry={MW_RY} className="fill-muted/30 stroke-border" strokeWidth="0.4" />
-        <path d={polyline(equator, true)} fill="none" strokeWidth="0.4" className="stroke-border" />
-        <path d={polyline(ecliptic, true)} fill="none" strokeWidth="0.4" strokeDasharray="1.6 1.4" className="stroke-[#c2703d]/50" />
-        {ticks.map((h) => {
+        <path d={MW_EQUATOR} fill="none" strokeWidth="0.4" className="stroke-border" />
+        <path d={MW_ECLIPTIC} fill="none" strokeWidth="0.4" strokeDasharray="1.6 1.4" className="stroke-[#c2703d]/50" />
+        {MW_TICKS.map((h) => {
           const p = mollweide(h * 15, 0);
           return (
             <text
@@ -757,7 +769,7 @@ export function AllSkyLocator({ ra, dec }: { ra: number; dec: number }) {
       </dl>
     </div>
   );
-}
+});
 
 /* Discovery logbook, persisted locally and exportable. */
 export function useDiscoveryLog() {
