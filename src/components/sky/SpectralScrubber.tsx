@@ -28,6 +28,30 @@ export const BAND_WAVELENGTHS: number[] = Array.from(
   (_, i) => LAMBDA_START * (1 + i / R),
 );
 
+/**
+ * A false colour for one band, so the slider can show what it is pointing at
+ * instead of being an anonymous 1px line. The wavelengths themselves are all
+ * infrared, which the eye cannot see, so these are chosen to be evenly
+ * distinguishable rather than physically meaningful, and the label underneath
+ * says so. 0.75 um is the short-wavelength end and 5 um the long.
+ */
+export function bandColour(lambdaUm: number): string {
+  const t = Math.max(0, Math.min(1, (lambdaUm - LAMBDA_START) / (5.2 - LAMBDA_START)));
+  // Deep blue through cyan, green, yellow, orange, to a warm red. Monotonic in
+  // lightness and hue together, so neighbouring bands never look the same.
+  const hue = 255 - t * 255;
+  return `hsl(${hue.toFixed(0)} 62% ${(38 + t * 14).toFixed(0)}%)`;
+}
+
+/** A plain-language name for where a band sits, for someone who has never seen a spectrograph. */
+export function bandPlainName(lambdaUm: number): string {
+  if (lambdaUm < 1.1) return "just past red";
+  if (lambdaUm < 1.6) return "warm infrared";
+  if (lambdaUm < 2.4) return "infrared";
+  if (lambdaUm < 3.6) return "deep infrared";
+  return "very deep infrared";
+}
+
 export type Molecule = {
   name: string;
   plain: string;

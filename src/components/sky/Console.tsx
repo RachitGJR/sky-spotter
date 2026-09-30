@@ -11,6 +11,8 @@ import {
   BAND_COUNT,
   BAND_WAVELENGTHS,
   MARKERS,
+  bandColour,
+  bandPlainName,
   defaultComposition,
   modelSpectrum,
   strongestMarker,
@@ -77,13 +79,13 @@ function Option<T extends string>({
           <button
             key={o.id}
             onClick={() => onChange(o.id)}
-            className={`px-2.5 py-2 text-left transition-colors ${
+            className={`min-h-[38px] px-3 py-2.5 text-left transition-colors ${
               active
                 ? "bg-[var(--deck-text)] text-[var(--deck-bg)]"
                 : "bg-transparent text-[var(--deck-muted)] hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
             }`}
           >
-            <span className="block text-[12px] leading-tight">{o.label}</span>
+            <span className="block text-[13px] leading-tight">{o.label}</span>
             {o.meta && (
               <span
                 className={`mt-0.5 block font-mono text-[10px] leading-tight ${
@@ -115,7 +117,7 @@ function GhostButton({
     <button
       onClick={onClick}
       title={title}
-      className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-[12px] transition-colors ${
+      className={`inline-flex min-h-[34px] items-center whitespace-nowrap rounded-md px-3 py-2 text-[13px] transition-colors ${
         active
           ? "bg-[var(--deck-text)] text-[var(--deck-bg)]"
           : "text-[var(--deck-muted)] hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
@@ -142,7 +144,7 @@ function IconButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`grid size-8 shrink-0 place-items-center rounded-md transition-colors ${
+      className={`grid size-10 shrink-0 place-items-center rounded-md transition-colors ${
         active
           ? "bg-[var(--deck-text)] text-[var(--deck-bg)]"
           : "text-[var(--deck-muted)] hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
@@ -179,10 +181,10 @@ const FILTERS: { id: Tone; label: string }[] = [
 ];
 
 const COMPARE_MODES: { id: Compare; label: string; hint: string }[] = [
-  { id: "blink", label: "Blink", hint: "alternate the two exposures" },
-  { id: "split", label: "Split", hint: "epoch A left, epoch B right" },
-  { id: "overlay", label: "Overlay", hint: "A in red, B in blue; movers come off the grey" },
-  { id: "diff", label: "Diff", hint: "B minus A; a mover shows as a bright/dark pair" },
+  { id: "blink", label: "Blink", hint: "the pictures flash one after another" },
+  { id: "split", label: "Side by side", hint: "the two pictures next to each other" },
+  { id: "overlay", label: "On top", hint: "one picture in red, the other in blue" },
+  { id: "diff", label: "What changed", hint: "what is different between the two" },
 ];
 
 /** The three beats a worked example walks through, in order. */
@@ -634,19 +636,19 @@ export default function Console() {
             </div>
           </Rail>
 
-          <Rail title="Target field">
+          <Rail title="Which part of the sky">
             <div className="mb-4 space-y-px overflow-hidden rounded-md border border-[var(--deck-line)]">
               {FIELDS.map((f) => (
                 <button
                   key={f.id}
                   onClick={() => setFieldId(f.id)}
-                  className={`flex w-full items-baseline justify-between gap-2 px-3 py-2 text-left transition-colors ${
+                  className={`flex min-h-[38px] w-full items-baseline justify-between gap-2 px-3 py-2.5 text-left transition-colors ${
                     f.id === fieldId
                       ? "bg-[var(--deck-raised)] text-[var(--deck-text)]"
                       : "text-[var(--deck-muted)] hover:bg-[var(--deck-raised)]/60"
                   }`}
                 >
-                  <span className="truncate text-[12px]">{f.name}</span>
+                  <span className="truncate text-[13px]">{f.name}</span>
                   <span className="shrink-0 font-mono text-[10px] text-[var(--deck-dim)]">
                     {f.members[0]?.designation}
                   </span>
@@ -664,9 +666,9 @@ export default function Console() {
           </Rail>
 
           <Rail
-            title="Compare"
+            title="Look at the two pictures"
             action={
-              <span className="font-mono text-[10px] text-[var(--deck-dim)]">
+              <span className="text-right text-[10px] text-[var(--deck-dim)]">
                 {COMPARE_MODES.find((m) => m.id === compare)?.hint}
               </span>
             }
@@ -681,8 +683,8 @@ export default function Console() {
               <div className="mt-3">
                 <Option
                   options={[
-                    { id: "play", label: "Auto" },
-                    { id: "hold", label: "Hold" },
+                    { id: "play", label: "Keep flashing" },
+                    { id: "hold", label: "Stop" },
                   ]}
                   value={playing ? "play" : "hold"}
                   onChange={(v) => {
@@ -692,7 +694,7 @@ export default function Console() {
                 />
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <GhostButton active={follow} onClick={() => setFollow((f) => !f)}>
-                    Follow the body
+                    Keep it centred
                   </GhostButton>
                 </div>
               </div>
@@ -700,11 +702,16 @@ export default function Console() {
           </Rail>
 
           <Rail
-            title="Survey epochs"
+            title="The pictures SPHEREx took"
             action={
-              <span className="font-mono text-[10px] text-[var(--deck-dim)]">+{baseline} d</span>
+              <span className="font-mono text-[10px] text-[var(--deck-dim)]">{baseline} days apart</span>
             }
           >
+            <p className="mb-3 text-[11px] leading-relaxed text-[var(--deck-dim)]">
+              Pick two. <span className="text-[var(--deck-accent)]">A</span> is the first
+              picture, <span className="text-[var(--deck-text)]">B</span> is the second.
+              Everything that moved is something new.
+            </p>
             <div className="mb-3 space-y-px overflow-hidden rounded-md border border-[var(--deck-line)]">
               {field.epochs.map((e, i) => {
                 const isA = i === aIdx;
@@ -730,11 +737,11 @@ export default function Console() {
                         setAIdx(i);
                         if (bIdx === i) setBIdx(aIdx);
                       }}
-                      title={`Use ${e.date} as epoch A`}
-                      className={`grid size-6 shrink-0 place-items-center rounded font-mono text-[10px] transition-colors ${
+                      title={`Use ${e.date} as the first picture (A)`}
+                      className={`grid size-8 shrink-0 place-items-center rounded font-mono text-[11px] font-semibold transition-colors ${
                         isA
                           ? "bg-[var(--deck-accent)] text-[var(--deck-bg)]"
-                          : "text-[var(--deck-dim)] hover:bg-[var(--deck-line)] hover:text-[var(--deck-text)]"
+                          : "text-[var(--deck-dim)] hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
                       }`}
                     >
                       A
@@ -744,11 +751,11 @@ export default function Console() {
                         setBIdx(i);
                         if (aIdx === i) setAIdx(bIdx);
                       }}
-                      title={`Use ${e.date} as epoch B`}
-                      className={`grid size-6 shrink-0 place-items-center rounded font-mono text-[10px] transition-colors ${
+                      title={`Use ${e.date} as the second picture (B)`}
+                      className={`grid size-8 shrink-0 place-items-center rounded font-mono text-[11px] font-semibold transition-colors ${
                         isB
                           ? "bg-[var(--deck-text)] text-[var(--deck-bg)]"
-                          : "text-[var(--deck-dim)] hover:bg-[var(--deck-line)] hover:text-[var(--deck-text)]"
+                          : "text-[var(--deck-dim)] hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
                       }`}
                     >
                       B
@@ -759,9 +766,9 @@ export default function Console() {
             </div>
             <Readout
               rows={[
-                ["epoch A", `${epoch1} · ${epochA.visit}`],
-                ["epoch B", `${epoch2} · ${epochB.visit}`],
-                ["baseline", `${baseline} days`],
+                ["A · first", `${epoch1} · ${epochA.visit}`],
+                ["B · second", `${epoch2} · ${epochB.visit}`],
+                ["time between", `${baseline} days`],
               ]}
             />
             {compare === "blink" && (
@@ -988,25 +995,19 @@ export default function Console() {
       {/* ------------------------------------------------------ bottom bar */}
       <footer className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-3 border-t border-[var(--deck-line-soft)] px-5 py-3">
         <div className="min-w-[128px]">
-          <p className="text-[12px] font-medium">
+          <p className="flex items-center gap-2 text-[12px] font-medium">
+            <span
+              className="size-3 shrink-0 rounded-full border border-[var(--deck-line)]"
+              style={{ background: bandColour(lambda) }}
+            />
             Band {band + 1} <span className="text-[var(--deck-dim)]">· {lambda.toFixed(2)} µm</span>
           </p>
           <p className="mt-0.5 font-mono text-[10px] text-[var(--deck-dim)]">
-            flux {curve[band].toFixed(3)} · {BAND_COUNT} channels
+            flux {curve[band].toFixed(3)} · {bandPlainName(lambda)}
           </p>
         </div>
 
-        <div className="flex min-w-[220px] flex-1 items-center gap-2">
-          <input
-            type="range"
-            min={0}
-            max={BAND_COUNT - 1}
-            value={band}
-            onChange={(e) => setBand(Number(e.target.value))}
-            className="deck-range flex-1"
-            aria-label="Spectral band"
-          />
-        </div>
+        <BandSlider band={band} onChange={setBand} />
 
         <div className="flex flex-wrap items-center gap-1.5">
           {MARKERS.slice(0, 4).map((m) => (
@@ -1016,7 +1017,8 @@ export default function Console() {
                 const i = BAND_WAVELENGTHS.findIndex((l) => l >= m.centre);
                 if (i >= 0) setBand(i);
               }}
-              className="rounded-md px-2 py-1 text-[11px] text-[var(--deck-muted)] transition-colors hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
+              title={`Jump to the ${m.name} band, near ${m.centre.toFixed(2)} µm`}
+              className="rounded-md px-2.5 py-1.5 text-[12px] text-[var(--deck-muted)] transition-colors hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
             >
               {m.name}
             </button>
@@ -1044,6 +1046,69 @@ export default function Console() {
       <TourDialog open={tourOpen} onOpenChange={setTourOpen} step={tourStep} setStep={setTourStep} />
       <BeginnerGuide open={guideOpen} onOpenChange={setGuideOpen} />
       <ExplainerDialog open={explainerOpen} onOpenChange={setExplainerOpen} />
+    </div>
+  );
+}
+
+/**
+ * The colour-band slider, built for someone who has never seen a spectrograph.
+ *
+ * A bare 1px range input is invisible and has a nine-pixel target. This one is a
+ * colour bar you can see, with a fat handle, a stepper on each side for anyone who
+ * would rather not drag, and plain words under the ends saying which way is which.
+ */
+function BandSlider({ band, onChange }: { band: number; onChange: (n: number) => void }) {
+  const step = (d: number) => onChange(Math.max(0, Math.min(BAND_COUNT - 1, band + d)));
+  return (
+    <div className="flex min-w-[300px] flex-1 flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => step(-1)}
+          disabled={band === 0}
+          aria-label="Previous colour band"
+          title="Previous band"
+          className="grid size-9 shrink-0 place-items-center rounded-md border border-[var(--deck-line)] text-[15px] text-[var(--deck-muted)] transition-colors hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)] disabled:opacity-30 disabled:hover:bg-transparent"
+        >
+          ◀
+        </button>
+
+        <div className="relative flex-1">
+          {/* The colour bar the handle rides on. */}
+          <div
+            className="pointer-events-none absolute inset-x-0 top-1/2 h-2.5 -translate-y-1/2 rounded-full"
+            style={{
+              background: `linear-gradient(to right, ${BAND_WAVELENGTHS.map(
+                (l) => `${bandColour(l)} ${(((l - BAND_WAVELENGTHS[0]) / (BAND_WAVELENGTHS[BAND_COUNT - 1] - BAND_WAVELENGTHS[0])) * 100).toFixed(1)}%`,
+              ).join(", ")})`,
+              opacity: 0.55,
+            }}
+          />
+          <input
+            type="range"
+            min={0}
+            max={BAND_COUNT - 1}
+            value={band}
+            onChange={(e) => onChange(Number(e.target.value))}
+            className="deck-range deck-range-fat relative w-full"
+            aria-label="Colour band"
+          />
+        </div>
+
+        <button
+          onClick={() => step(1)}
+          disabled={band === BAND_COUNT - 1}
+          aria-label="Next colour band"
+          title="Next band"
+          className="grid size-9 shrink-0 place-items-center rounded-md border border-[var(--deck-line)] text-[15px] text-[var(--deck-muted)] transition-colors hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)] disabled:opacity-30 disabled:hover:bg-transparent"
+        >
+          ▶
+        </button>
+      </div>
+
+      <div className="flex items-baseline justify-between pl-11 pr-11 text-[10px] text-[var(--deck-dim)]">
+        <span>◀ shorter · {BAND_WAVELENGTHS[0].toFixed(2)} µm</span>
+        <span>{BAND_WAVELENGTHS[BAND_COUNT - 1].toFixed(2)} µm · longer ▶</span>
+      </div>
     </div>
   );
 }

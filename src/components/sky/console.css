@@ -71,3 +71,27 @@
   background: var(--deck-text);
   cursor: pointer;
 }
+
+/* The colour-band slider. A 13px thumb on a 1px track is a fiddly target for
+ * anyone, and impossible for a child, so this variant is a 2px track with a 20px
+ * handle ringed in the background colour, which stays visible over the colour bar
+ * whatever hue it is currently sitting on. */
+.deck-range-fat {
+  height: 2px;
+  background: var(--deck-line);
+  margin: 0;
+}
+.deck-range-fat::-webkit-slider-thumb {
+  width: 20px;
+  height: 20px;
+  border: 3px solid var(--deck-bg);
+  background: var(--deck-text);
+  box-shadow: 0 0 0 1px var(--deck-line);
+}
+.deck-range-fat::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 3px solid var(--deck-bg);
+  background: var(--deck-text);
+  box-shadow: 0 0 0 1px var(--deck-line);
+}

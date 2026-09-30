@@ -8,6 +8,20 @@ import { MoverInset } from "@/components/sky/MoverInset";
 
 export type { Compare, Tone, View };
 
+/**
+ * One quiet line of instruction, in the bottom-left corner, that goes away as soon
+ * as the citizen touches the image. It answers the two questions a new user always
+ * has and never asks: how do I move this, and what do I click.
+ */
+function Hint({ text, show }: { text: string; show: boolean }) {
+  if (!show) return null;
+  return (
+    <p className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-[var(--deck-line)] px-3 py-1.5 text-center text-[11px]" style={{ background: "var(--deck-panel)", color: "var(--deck-dim)" }}>
+      {text}
+    </p>
+  );
+}
+
 export type Epoch = {
   header: SpherexHeader | null;
   plane: SkyPlane | null;
@@ -90,6 +104,17 @@ export function SkyCanvas({
   const dragRef = useRef<{ x: number; y: number; view: View } | null>(null);
   const draggedRef = useRef(false);
   const [size, setSize] = useState({ w: 0, h: 0 });
+  /**
+   * Where the pointer is, in the view the pixels were drawn for. A dot and a
+   * coordinate readout follow it, so it is always obvious *where on the sky* you
+   * are pointing rather than having to infer it from the graticule.
+   */
+  const [hover, setHover] = useState<{ x: number; y: number; p: SkyPoint } | null>(null);
+  /** A point the citizen has stuck on the sky with a click, tagged with the field it belongs to. */
+  const [pin, setPin] = useState<{ p: SkyPoint; key: string } | null>(null);
+  /** Set once they touch the image, so the instruction line can retire. */
+  const touchedRef = useRef(false);
+  const [touched, setTouched] = useState(false);
 
   /**
    * The view the pixels on screen were actually drawn for. Interaction uses this,
@@ -269,6 +294,25 @@ export function SkyCanvas({
     return tile;
   }, [tone]);
 
+  /** A mark only counts while you are still looking at the field it was put on. */
+  const fieldKey = `${a.header?.key ?? ""}|${b.header?.key ?? ""}`;
+  const activePin = pin && pin.key === fieldKey ? pin.p : null;
+
+  /** Screen pixel back to a sky position, the inverse of screenOf. */
+  const skyAt = useCallback(
+    (x: number, y: number): SkyPoint => {
+      const base = drawn ?? view;
+      const aspect = size.w / size.h;
+      return deproject(
+        ((x - size.w / 2) / (size.w / 2)) * (base.fovDeg * aspect / 2),
+        -((y - size.h / 2) / (size.h / 2)) * (base.fovDeg / 2),
+        base.ra,
+        base.dec,
+      );
+    },
+    [drawn, view, size],
+  );
+
   /**
    * The graticule, scale bar, detector outlines and split divider. None of it
    * depends on which epoch is showing, so it is drawn once into an offscreen canvas
@@ -441,6 +485,35 @@ export function SkyCanvas({
     ctx.clearRect(0, 0, size.w, size.h);
 
     const dark = tone !== "paper";
+
+    // The pin goes down first so a body ring always sits on top of it.
+    if (activePin) {
+      const s = screenOf(activePin);
+      const inside = s.x > 0 && s.x < size.w && s.y > 0 && s.y < size.h;
+      if (inside) {
+        ctx.save();
+        ctx.strokeStyle = "#5b8dd6";
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(s.x - 9, s.y);
+        ctx.lineTo(s.x - 3, s.y);
+        ctx.moveTo(s.x + 3, s.y);
+        ctx.lineTo(s.x + 9, s.y);
+        ctx.moveTo(s.x, s.y - 9);
+        ctx.lineTo(s.x, s.y - 3);
+        ctx.moveTo(s.x, s.y + 3);
+        ctx.lineTo(s.x, s.y + 9);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, 4.5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.font = "10px ui-monospace, SFMono-Regular, Menlo, monospace";
+        ctx.fillStyle = "#5b8dd6";
+        ctx.fillText("your mark", s.x + 12, s.y + 3);
+        ctx.restore();
+      }
+    }
+
     const label = dark ? "rgba(255,255,255,0.55)" : "rgba(17,17,19,0.5)";
     const showVectors = compare === "blink" || compare === "split";
     for (const mover of movers) {
@@ -466,7 +539,7 @@ export function SkyCanvas({
       const inside = s.x > -20 && s.x < size.w + 20 && s.y > -20 && s.y < size.h + 20;
       if (inside) {
         ctx.beginPath();
-        ctx.arc(s.x, s.y, selected ? 8 : 6, 0, Math.PI * 2);
+        ctx.arc(s.x, s.y, selected ? 11 : 8, 0, Math.PI * 2);
         ctx.strokeStyle = ACCENT;
         ctx.lineWidth = selected ? 1.8 : 1.2;
         ctx.stroke();
@@ -508,7 +581,32 @@ export function SkyCanvas({
         ctx.restore();
       }
     }
-  }, [drawn, view, size, tone, compare, epoch, movers, selectedId, showGrid, screenOf, a.header, b.header, a.short, b.short]);
+
+    // The hover point. Drawn last so nothing covers it, and deliberately plain: a
+    // small open circle with a hairline cross, so it never gets mistaken for a
+    // planet marker.
+    if (hover) {
+      const inside =
+        hover.x > 0 && hover.x < size.w && hover.y > 0 && hover.y < size.h;
+      if (inside) {
+        ctx.save();
+        ctx.strokeStyle = dark ? "rgba(255,255,255,0.75)" : "rgba(17,17,19,0.7)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(hover.x, hover.y, 5.5, 0, Math.PI * 2);
+        ctx.moveTo(hover.x - 11, hover.y);
+        ctx.lineTo(hover.x - 7, hover.y);
+        ctx.moveTo(hover.x + 7, hover.y);
+        ctx.lineTo(hover.x + 11, hover.y);
+        ctx.moveTo(hover.x, hover.y - 11);
+        ctx.lineTo(hover.x, hover.y - 7);
+        ctx.moveTo(hover.x, hover.y + 7);
+        ctx.lineTo(hover.x, hover.y + 11);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }, [drawn, view, size, tone, compare, epoch, movers, selectedId, showGrid, screenOf, hover, activePin, a.header, b.header, a.short, b.short]);
 
   /* ---------------------------------------------------------------- *
    * Interaction. Every handler works from the view the pixels were
@@ -522,30 +620,56 @@ export function SkyCanvas({
     // Measure against the untransformed wrapper: the canvas rect is being scaled
     // by the pending transform, which would corrupt the hit test.
     const rect = wrapRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    if (!rect || size.w < 8) return;
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
+    // A generous grab radius. A nine-pixel ring is a fiddly target, and the whole
+    // point is that a first-time user should be able to hit it without trying.
     let best: { id: string; d: number } | null = null;
     const at = epoch === 0 ? "epoch1" : "epoch2";
     for (const mover of movers) {
       const p = screenOf(mover[at]);
       const d = Math.hypot(p.x - x, p.y - y);
-      if (d < 18 && (!best || d < best.d)) best = { id: mover.id, d };
+      if (d < 30 && (!best || d < best.d)) best = { id: mover.id, d };
     }
-    onSelect(best?.id ?? null);
+    if (best) {
+      onSelect(best.id);
+      return;
+    }
+    // Empty sky: stick a mark exactly where they clicked, so "I found something
+    // here" is a thing they can point at rather than a thing they have to describe.
+    // Clicking the mark again takes it off.
+    const existing = activePin ? screenOf(activePin) : null;
+    if (existing && Math.hypot(existing.x - x, existing.y - y) < 14) {
+      setPin(null);
+      return;
+    }
+    setPin({ p: skyAt(x, y), key: `${a.header?.key ?? ""}|${b.header?.key ?? ""}` });
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!touchedRef.current) {
+      touchedRef.current = true;
+      setTouched(true);
+    }
     dragRef.current = { x: event.clientX, y: event.clientY, view: drawnRef.current ?? view };
     draggedRef.current = false;
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    const drag = dragRef.current;
-    if (!drag) return;
     const rect = wrapRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    if (rect && size.w >= 8) {
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      if (x >= 0 && x <= size.w && y >= 0 && y <= size.h) {
+        setHover({ x, y, p: skyAt(x, y) });
+      } else {
+        setHover(null);
+      }
+    }
+    const drag = dragRef.current;
+    if (!drag || !rect) return;
     if (Math.abs(event.clientX - drag.x) > 3 || Math.abs(event.clientY - drag.y) > 3) {
       draggedRef.current = true;
     }
@@ -563,7 +687,18 @@ export function SkyCanvas({
     dragRef.current = null;
   };
 
-  const handleWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {
+  /** Escape takes the mark off the sky again. */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPin(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);  const handleWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {
+    if (!touchedRef.current) {
+      touchedRef.current = true;
+      setTouched(true);
+    }
     const base = drawnRef.current ?? view;
     onViewChange({
       ...base,
@@ -591,6 +726,7 @@ export function SkyCanvas({
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
           onWheel={handleWheel}
+          onPointerLeave={() => setHover(null)}
           className="absolute inset-0 size-full cursor-grab touch-none active:cursor-grabbing"
         />
       </div>
@@ -604,6 +740,29 @@ export function SkyCanvas({
           </div>
         )}
       </div>
+
+      {/* The point you are pointing at, named in sky coordinates. A child can find
+          this by waving the mouse around; an expert can read the number. */}
+      {hover && (
+        <div
+          className="pointer-events-none absolute z-10 whitespace-nowrap rounded-sm px-2 py-1 font-mono text-[11px] leading-tight"
+          style={{
+            left: Math.min(Math.max(hover.x + 16, 8), Math.max(8, size.w - 190)),
+            top: Math.min(Math.max(hover.y + 16, 8), Math.max(8, size.h - 40)),
+            background: "var(--deck-panel)",
+            color: "var(--deck-text)",
+            border: "1px solid var(--deck-line)",
+          }}
+        >
+          {formatRa(hover.p.ra)} {formatDec(hover.p.dec)}
+        </div>
+      )}
+
+      {/* How to move it, said once, quietly, until they have done it. */}
+      <Hint
+        text="Drag to move the sky · scroll to zoom · click a ring to pick it · click empty sky to mark it"
+        show={!touched}
+      />
 
       {selected && (
         <MoverInset
