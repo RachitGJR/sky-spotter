@@ -132,6 +132,11 @@ export async function readPlane(
   // pixel wide, so a 4x4 box mean would smear every star's flux across sixteen
   // pixels and leave the field looking empty. Taking the brightest sample in each
   // block is what survey images do when the point sources are the point.
+  //
+  // Reading the samples through the DataView rather than byte-swapping the whole
+  // plane first is deliberate: a byte-swapped copy plus a Uint32Array scan benchmarks
+  // at roughly twice this on a warm JIT (see scripts/bench-pool.ts), and this loop
+  // is already only single-digit milliseconds.
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       let peak = Number.NEGATIVE_INFINITY;
@@ -162,7 +167,7 @@ export async function readPlane(
   return { data, width, height, low, high, bytes: raw.byteLength };
 }
 
-/* ------------------------------------------------------------------ *
+  /* ------------------------------------------------------------------ *
  * Detector geometry.
  *
  * The exposures are square, 3.48° on a side, and rolled by the spacecraft attitude
@@ -203,22 +208,140 @@ export function fitFovDeg(header: SpherexHeader, aspect: number) {
 }
 
 /* ------------------------------------------------------------------ *
- * Caching. A field has four epochs and the citizen will flip between
- * them constantly, so a decoded 510x510 plane is worth keeping.
+ * Caching, in two layers.
+ *
+ * In memory: a field has four epochs and the citizen flips between them
+ * constantly, so a decoded 510x510 plane is worth keeping.
+ *
+ * On disk: the same plane, in Cache Storage. Pulling one exposure costs about
+ * 17 MB and roughly seven seconds, and the citizen only ever sees the pooled
+ * 510x510 result, which is about 1 MB. Storing that instead means coming back
+ * to a field they already looked at skips the download *and* the pooling, which
+ * is the difference between a few hundred milliseconds and seven seconds each.
  * ------------------------------------------------------------------ */
+
+const CACHE_NAME = "spherex-planes-v1";
 
 const headerCache = new Map<string, SpherexHeader>();
 const headerPending = new Map<string, Promise<SpherexHeader>>();
 const planeCache = new Map<string, Promise<SkyPlane>>();
+
+/**
+ * Cache Storage is unavailable outside a browser (in the check scripts, and in
+ * any SSR), and a full disk quota must never break the viewer, so every path
+ * through here is best-effort.
+ */
+function diskCache(): Promise<Cache | null> {
+  if (typeof caches === "undefined") return Promise.resolve(null);
+  return caches
+    .open(CACHE_NAME)
+    .catch(() => null);
+}
+
+/**
+ * The FITS header is small and never changes for a given object, so it rides in
+ * the same on-disk cache. It gates the plane fetch, which is the slow part, so
+ * skipping it turns a cold field into a plane-only load.
+ */
+async function readCachedHeader(key: string): Promise<SpherexHeader | null> {
+  const cache = await diskCache();
+  if (!cache) return null;
+  try {
+    const hit = await cache.match(`${CACHE_NAME}/header/${key}`);
+    if (!hit) return null;
+    return (await hit.json()) as SpherexHeader;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCachedHeader(key: string, header: SpherexHeader): Promise<void> {
+  const cache = await diskCache();
+  if (!cache) return;
+  try {
+    await cache.put(
+      `${CACHE_NAME}/header/${key}`,
+      new Response(JSON.stringify(header), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  } catch {
+    // A full quota just means the next visit re-reads the header.
+  }
+}
+
+/** The pooled plane, stored as a plain ArrayBuffer so it round-trips exactly. */
+async function readCachedPlane(key: string, target: number): Promise<SkyPlane | null> {
+  const cache = await diskCache();
+  if (!cache) return null;
+  try {
+    const hit = await cache.match(`${CACHE_NAME}/${target}/${key}`);
+    if (!hit) return null;
+    const meta = hit.headers.get("x-spherex-meta");
+    if (!meta) return null;
+    const { width, height, low, high, bytes } = JSON.parse(meta) as {
+      width: number;
+      height: number;
+      low: number;
+      high: number;
+      bytes: number;
+    };
+    const buffer = await hit.arrayBuffer();
+    // Guard against a truncated or mismatched entry rather than building a plane
+    // out of whatever happened to be in the buffer.
+    if (buffer.byteLength !== width * height * 4) return null;
+    return {
+      data: new Float32Array(buffer),
+      width,
+      height,
+      low,
+      high,
+      bytes,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function writeCachedPlane(
+  key: string,
+  target: number,
+  plane: SkyPlane,
+): Promise<void> {
+  const cache = await diskCache();
+  if (!cache) return;
+  try {
+    const meta = JSON.stringify({
+      width: plane.width,
+      height: plane.height,
+      low: plane.low,
+      high: plane.high,
+      bytes: plane.bytes,
+    });
+    await cache.put(
+      `${CACHE_NAME}/${target}/${key}`,
+      new Response(plane.data.buffer as ArrayBuffer, {
+        headers: {
+          "content-type": "application/octet-stream",
+          "x-spherex-meta": meta,
+        },
+      }),
+    );
+  } catch {
+    // A full quota just means the next visit downloads again.
+  }
+}
 
 export function loadHeader(key: string, signal?: AbortSignal): Promise<SpherexHeader> {
   const hit = headerCache.get(key);
   if (hit) return Promise.resolve(hit);
   const inFlight = headerPending.get(key);
   if (inFlight) return inFlight;
-  const pending = readHeader(key, signal)
+  const pending = readCachedHeader(key)
+    .then((cached) => cached ?? readHeader(key, signal))
     .then((h) => {
       headerCache.set(key, h);
+      void writeCachedHeader(key, h);
       return h;
     })
     .finally(() => headerPending.delete(key));
@@ -234,9 +357,28 @@ export function loadPlane(
   const id = `${header.key}@${target}`;
   let hit = planeCache.get(id);
   if (!hit) {
-    hit = readPlane(header, target, signal);
+    // Disk first: a pooled plane that survives a reload is worth far more than
+    // the in-memory copy, which dies with the tab. An aborted load still falls
+    // through to the network rather than throwing.
+    hit = readCachedPlane(header.key, target)
+      .then((cached) => cached ?? readPlane(header, target, signal))
+      .then((plane) => {
+        if (!planeCache.has(id)) void writeCachedPlane(header.key, target, plane);
+        return plane;
+      });
     planeCache.set(id, hit);
     hit.catch(() => planeCache.delete(id));
   }
   return hit;
+}
+
+/** Empties the on-disk plane cache. Exposed so the viewer can offer a clean slate. */
+export async function clearPlaneDiskCache(): Promise<void> {
+  const cache = await diskCache();
+  if (!cache) return;
+  try {
+    await cache.delete(CACHE_NAME);
+  } catch {
+    // Nothing to clear.
+  }
 }
