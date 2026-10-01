@@ -892,7 +892,16 @@ export default function Console() {
           <div className="pointer-events-none absolute right-5 top-5 text-right font-mono text-[10px]">
             <p className="text-[var(--deck-ok)]">archive · {status === "ready" ? "live" : status}</p>
             <p className="mt-0.5 text-[var(--deck-dim)]">{header ? header.obsid : "—"}</p>
-            {moversError && <p className="mt-0.5 text-[var(--deck-bad)]">horizons · error</p>}
+            {moversError && (
+              // The real message matters: "horrizons error" on its own gave no
+              // way to tell a JPL outage from a cache or schema fault.
+              <p
+                className="mt-0.5 max-w-[38ch] truncate text-[var(--deck-bad)]"
+                title={moversError}
+              >
+                horizons · {moversError}
+              </p>
+            )}
           </div>
 
           <div className="absolute bottom-5 left-5 flex flex-col gap-px overflow-hidden rounded-md border border-[var(--deck-line)]">

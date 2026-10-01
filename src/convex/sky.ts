@@ -113,11 +113,16 @@ async function fetchPhysical(designation: string): Promise<Physical> {
       );
       if (!res.ok) throw new Error(String(res.status));
       const data = await res.json();
+      // Several physical parameters come back as text ("unknown", or a
+      // spectral type like "Sq"), so anything that is not a finite number is
+      // treated as missing rather than becoming NaN.
       const par = (name: string) => {
         const hit = (data.phys_par ?? []).find(
           (p: { name: string }) => String(p.name).toUpperCase() === name,
         );
-        return hit?.value === undefined ? undefined : Number(hit.value);
+        if (hit?.value === undefined || hit.value === null) return undefined;
+        const value = Number(hit.value);
+        return Number.isFinite(value) ? value : undefined;
       };
       return {
         name: data.object?.fullname ?? data.object?.shortname,
