@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deproject, formatDec, formatRa, project, type SkyPoint } from "@/lib/spherex/astro";
 import type { SkyPlane, SpherexHeader } from "@/lib/spherex/archive";
 import type { Mover } from "@/lib/spherex/movers";
+import { nextMoverId } from "@/lib/spherex/movers";
 import { shadeBlinkPair, shadeFrame, type Compare, type Tone, type View } from "@/lib/spherex/shade";
 import { fitFovDeg } from "@/lib/spherex/archive";
 import { MoverInset } from "@/components/sky/MoverInset";
@@ -608,6 +609,19 @@ export function SkyCanvas({
     }
   }, [drawn, view, size, tone, compare, epoch, movers, selectedId, showGrid, screenOf, hover, activePin, a.header, b.header, a.short, b.short]);
 
+  /**
+   * Step to the next (or previous) body in the field's own order. This is the
+   * escape hatch for touch: a finger does not have to find a small ring a second
+   * time, it just keeps tapping. Starts at the first body when nothing is picked.
+   */
+  const cycleSelection = useCallback(
+    (dir: 1 | -1 = 1) => {
+      const next = nextMoverId(movers, selectedId, dir);
+      if (next !== null) onSelect(next);
+    },
+    [movers, selectedId, onSelect],
+  );
+
   /* ---------------------------------------------------------------- *
    * Interaction. Every handler works from the view the pixels were
    * drawn for, so a drag tracks the cursor exactly.
@@ -633,7 +647,9 @@ export function SkyCanvas({
       if (d < 30 && (!best || d < best.d)) best = { id: mover.id, d };
     }
     if (best) {
-      onSelect(best.id);
+      // Tapping the body that is already showing moves on to the next one.
+      if (best.id === selectedId && movers.length > 1) cycleSelection(1);
+      else onSelect(best.id);
       return;
     }
     // Empty sky: stick a mark exactly where they clicked, so "I found something
@@ -687,14 +703,21 @@ export function SkyCanvas({
     dragRef.current = null;
   };
 
-  /** Escape takes the mark off the sky again. */
+  /** Escape takes the mark off the sky again; the arrows walk the bodies. */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPin(null);
+      if (e.key === "Escape") {
+        setPin(null);
+        return;
+      }
+      if (e.key === "ArrowRight") cycleSelection(1);
+      else if (e.key === "ArrowLeft") cycleSelection(-1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);  const handleWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {
+  }, [cycleSelection]);
+
+  const handleWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {
     if (!touchedRef.current) {
       touchedRef.current = true;
       setTouched(true);
@@ -758,9 +781,27 @@ export function SkyCanvas({
         </div>
       )}
 
+      {/* Nothing to cycle through when the field holds a single body. */}
+      {movers.length > 1 && (
+        <button
+          type="button"
+          onClick={() => cycleSelection(1)}
+          aria-label={`Show the next body${selected ? ` (now showing ${selected.name})` : ""}`}
+          className="absolute bottom-28 left-5 z-10 flex min-h-[40px] items-center gap-2 rounded-md border px-3 text-[13px]"
+          style={{ background: "var(--deck-panel)", borderColor: "var(--deck-line)", color: "var(--deck-text)" }}
+        >
+          <span className="opacity-70">next</span>
+          <span aria-hidden>▶</span>
+        </button>
+      )}
+
       {/* How to move it, said once, quietly, until they have done it. */}
       <Hint
-        text="Drag to move the sky · scroll to zoom · click a ring to pick it · click empty sky to mark it"
+        text={
+          movers.length > 1
+            ? "Drag to move the sky · scroll to zoom · tap a ring, or tap Next ▶ · tap empty sky to mark it"
+            : "Drag to move the sky · scroll to zoom · tap a ring to pick it · tap empty sky to mark it"
+        }
         show={!touched}
       />
 

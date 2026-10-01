@@ -2,7 +2,7 @@
  * Runs the checks that need no network, in the order that fails fastest.
  * `bun run check:live` covers the rest, which reads the archive and JPL.
  */
-const LOCAL = ["check-astro.ts", "check-locator.mjs", "check-fit.ts", "check-pointing.ts"];
+const LOCAL = ["check-astro.ts", "check-locator.mjs", "check-fit.ts", "check-pointing.ts", "check-movers.ts"];
 
 const failed: string[] = [];
 for (const name of LOCAL) {

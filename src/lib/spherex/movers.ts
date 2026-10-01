@@ -37,6 +37,26 @@ export function motionOf(mover: Mover, baselineDays: number): MoverMotion {
 }
 
 /**
+ * Which body to show after stepping through the field. Wraps in the field's own
+ * order, and starts at the first (or last, going backwards) body when nothing is
+ * picked yet. Returns null when there is nothing to pick, so a single-body field
+ * never offers a "next".
+ *
+ * This is what lets a finger keep tapping instead of hunting for a small ring a
+ * second time, so the order matters: it follows the list the citizen can see.
+ */
+export function nextMoverId(
+  movers: readonly Pick<Mover, "id">[],
+  selectedId: string | null,
+  dir: 1 | -1 = 1,
+): string | null {
+  if (movers.length === 0) return null;
+  const at = movers.findIndex((m) => m.id === selectedId);
+  const index = at < 0 ? (dir < 0 ? movers.length - 1 : 0) : (at + dir + movers.length) % movers.length;
+  return movers[index].id;
+}
+
+/**
  * Apparent visual magnitude from the body's real absolute magnitude and its real
  * distance at that epoch. Phase geometry is ignored, which costs a few tenths of
  * a magnitude for most of the bodies a citizen will meet here.
