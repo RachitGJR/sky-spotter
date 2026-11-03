@@ -13,7 +13,7 @@
     "check:live": "bun run scripts/check-wcs.ts && bun run scripts/check-epochs.mjs && bun run scripts/check-epoch-pairs.mjs && bun run scripts/check-ephemeris.mts && bun run scripts/check-render.ts && bun run scripts/check-examples.mjs"
   },
   "dependencies": {
-    "@convex-dev/auth": "^0.0.90",
+    "@convex-dev/auth": "^0.0.96",
     "@hookform/resolvers": "^5.2.2",
     "@jridgewell/trace-mapping": "^0.3.31",
     "@oslojs/crypto": "^1.0.1",

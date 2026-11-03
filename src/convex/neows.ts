@@ -44,7 +44,7 @@ export const getNeoFeed = action({
     const url = `${NEOWS}?start_date=${fmt(today)}&end_date=${fmt(end)}&api_key=${encodeURIComponent(key)}`;
 
     const started = Date.now();
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       return {

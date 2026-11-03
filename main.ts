@@ -12,4 +12,8 @@ app.use("*", serveStatic({ root: "./dist" }));
 // 3) Fallback to index.html for the SPA
 app.get("*", serveStatic({ path: "./dist/index.html" }));
 
+declare const Deno: {
+	serve: (handler: typeof app.fetch) => void;
+};
+
 Deno.serve(app.fetch);

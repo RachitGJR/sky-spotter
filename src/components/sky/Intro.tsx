@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Aperture } from "lucide-react";
+import { Aperture, X } from "lucide-react";
 
 const SEEN_KEY = "spherex.intro.v2";
 
@@ -65,7 +65,10 @@ export function Intro({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === "Space" || e.code === "Escape" || e.code === "Enter") {
+      if (e.code === "Escape") {
+        e.preventDefault();
+        onDismiss();
+      } else if (e.code === "Space" || e.code === "Enter") {
         e.preventDefault();
         onStart();
       }
@@ -83,11 +86,22 @@ export function Intro({
       style={{ background: "color-mix(in srgb, var(--deck-bg) 88%, transparent)" }}
     >
       <div className="w-[min(520px,100%)] rounded-xl border border-[var(--deck-line)] p-7" style={{ background: "var(--deck-panel)" }}>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5">
           <Aperture className="size-4 text-[var(--deck-accent)]" />
           <span className="text-[11px] uppercase tracking-[0.22em] text-[var(--deck-dim)]">
             First visit · 20 seconds
           </span>
+          </div>
+          <button
+            type="button"
+            onClick={onDismiss}
+            aria-label="Close introduction"
+            title="Close introduction"
+            className="grid size-8 shrink-0 place-items-center rounded-md text-[var(--deck-dim)] transition-colors hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
+          >
+            <X className="size-4" />
+          </button>
         </div>
 
         <div className="mt-6 flex items-end gap-2.5" style={{ height: 92 }}>

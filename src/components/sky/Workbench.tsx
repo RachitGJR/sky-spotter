@@ -492,11 +492,11 @@ export function BeginnerGuide({ open, onOpenChange }: { open: boolean; onOpenCha
 }
 
 const CHAPTERS = [
-  { t: "A telescope built to see everything", d: "0:00" },
-  { t: "Why infrared", d: "0:22" },
-  { t: "The car-window trick", d: "0:44" },
-  { t: "Blinking two epochs", d: "1:06" },
-  { t: "Reading the fingerprint", d: "1:28" },
+  { t: "A telescope built to see everything", d: "0:00", body: "SPHEREx scans the whole sky in 102 infrared bands." },
+  { t: "Why infrared", d: "0:22", body: "Infrared light reveals dust, ice and heat hidden from our eyes." },
+  { t: "The car-window trick", d: "0:44", body: "Stars stay fixed while nearby worlds slide across the frame." },
+  { t: "Blinking two epochs", d: "1:06", body: "Compare two dates and a moving object jumps out immediately." },
+  { t: "Reading the fingerprint", d: "1:28", body: "Absorption bands show which molecules make up the object." },
 ];
 
 /** The in-app explainer: a chaptered, self-contained animated brief. */
@@ -522,8 +522,7 @@ export function ExplainerDialog({
         <DialogHeader>
           <DialogTitle>Cosmic explainer</DialogTitle>
           <DialogDescription>
-            Five minutes, condensed to five chapters. Runs inside the page, no video file
-            to download.
+            A short visual explanation of how SPHEREx finds moving worlds.
           </DialogDescription>
         </DialogHeader>
 
@@ -549,8 +548,11 @@ export function ExplainerDialog({
                   i === chapter ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60"
                 }`}
               >
-                <span>{c.t}</span>
-                <span className="font-mono text-[11px]">{c.d}</span>
+                <span className="min-w-0 pr-3">
+                  <span className="block">{c.t}</span>
+                  <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">{c.body}</span>
+                </span>
+                <span className="shrink-0 font-mono text-[11px]">{c.d}</span>
               </button>
             </li>
           ))}

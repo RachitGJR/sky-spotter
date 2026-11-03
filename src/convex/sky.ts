@@ -67,7 +67,7 @@ async function fetchEphemeris(
 
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const res = await fetch(`${HORIZONS}?${params}`);
+      const res = await fetch(`${HORIZONS}?${params}`, { signal: AbortSignal.timeout(15_000) });
       const text = await res.text();
       const block = text.match(/\$\$SOE([\s\S]*?)\$\$EOE/);
       if (!block) return null;
@@ -109,7 +109,7 @@ async function fetchPhysical(designation: string): Promise<Physical> {
     try {
       const res = await fetch(
         `${SBDB}?sstr=${encodeURIComponent(designation)}&phys-par=1`,
-        { headers: { accept: "application/json" } },
+        { headers: { accept: "application/json" }, signal: AbortSignal.timeout(15_000) },
       );
       if (!res.ok) throw new Error(String(res.status));
       const data = await res.json();

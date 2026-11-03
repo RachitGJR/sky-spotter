@@ -29,8 +29,19 @@ import {
 } from "@/components/sky/Workbench";
 import { Intro, useIntro } from "@/components/sky/Intro";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Aperture,
   Asterisk,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
   Crosshair,
   Grid3x3,
   GraduationCap,
@@ -39,6 +50,7 @@ import {
   Search,
   Volume2,
   VolumeX,
+  X,
 } from "lucide-react";
 import "./console.css";
 
@@ -280,6 +292,7 @@ export default function Console() {
   const [band, setBand] = useState(28);
   const [view, setView] = useState<View>({ ra: epochA.ra, dec: epochA.dec, fovDeg: 3.5 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectionClosed, setSelectionClosed] = useState(false);
 
   const [tourOpen, setTourOpen] = useState(false);
   const [tourStep, setTourStep] = useState(0);
@@ -309,6 +322,7 @@ export default function Console() {
 
   const runExample = useCallback((example: Example) => {
     setExampleId(example.id);
+    setSelectionClosed(false);
     setFieldId(example.fieldId);
     examplePair.current = example;
     setAIdx(Math.min(example.a, getField(example.fieldId).epochs.length - 1));
@@ -325,6 +339,7 @@ export default function Console() {
   // asked for it keeps the pair the example asked for.
   useEffect(() => {
     setSelectedId(null);
+    setSelectionClosed(false);
     const ex = examplePair.current;
     examplePair.current = null;
     if (ex && ex.fieldId === field.id) {
@@ -422,8 +437,13 @@ export default function Console() {
   // Selecting the body is what the inset and the target card key off, so a worked
   // example falls back to the field's own member as soon as its ephemeris lands.
   // Derived rather than stored, so no effect has to push a selection into state.
-  const effectiveSelectedId =
-    selectedId ?? (activeExample && movers.length ? movers[0].id : null);
+  const effectiveSelectedId = selectionClosed
+    ? null
+    : selectedId ?? (activeExample && movers.length ? movers[0].id : null);
+  const selectMover = useCallback((id: string | null) => {
+    setSelectionClosed(false);
+    setSelectedId(id);
+  }, []);
   const selected = movers.find((m) => m.id === effectiveSelectedId) ?? null;
   const motion = selected ? motionOf(selected, baseline) : null;
 
@@ -513,21 +533,40 @@ export default function Console() {
   return (
     <div className="flex h-screen flex-col overflow-hidden text-[var(--deck-text)]" style={{ background: "var(--deck-bg)" }}>
       {/* ---------------------------------------------------------- top bar */}
-      <header className="flex shrink-0 items-center gap-3 border-b border-[var(--deck-line-soft)] px-5 py-2.5">
+      <header className="flex min-w-0 shrink-0 flex-wrap items-center gap-3 overflow-hidden border-b border-[var(--deck-line-soft)] px-5 py-2.5">
         <div className="flex shrink-0 items-baseline gap-2.5">
           <Aperture className="size-4 translate-y-0.5 text-[var(--deck-accent)]" />
           <span className="text-[12px] font-semibold uppercase tracking-[0.22em]">SPHEREx</span>
           <span className="text-[12px] text-[var(--deck-dim)]">Blink Comparator</span>
         </div>
 
-        <div className="hidden min-w-0 flex-1 items-center gap-1 lg:flex">
-          <span className="h-4 w-px shrink-0 bg-[var(--deck-line)]" />
-          {FIELDS.map((f) => (
-            <GhostButton key={f.id} active={f.id === fieldId} onClick={() => setFieldId(f.id)}>
-              {f.name}
-            </GhostButton>
-          ))}
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="hidden min-h-[38px] max-w-[190px] items-center gap-2 rounded-md border border-[var(--deck-line)] px-3 text-left text-[13px] text-[var(--deck-muted)] transition-colors hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)] lg:flex"
+              aria-label="Choose sky field"
+            >
+              <span className="truncate">{field.name}</span>
+              <ChevronDown className="size-3.5 shrink-0" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-60 border-[var(--deck-line)] bg-[var(--deck-panel)] text-[var(--deck-text)]">
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-[0.16em] text-[var(--deck-dim)]">
+              Choose a sky field
+            </DropdownMenuLabel>
+            {FIELDS.map((f) => (
+              <DropdownMenuItem
+                key={f.id}
+                onClick={() => setFieldId(f.id)}
+                className="cursor-pointer text-[13px] focus:bg-[var(--deck-raised)] focus:text-[var(--deck-text)]"
+              >
+                <span className="flex-1">{f.name}</span>
+                {f.id === fieldId && <Check className="size-3.5 text-[var(--deck-accent)]" />}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <GhostButton
@@ -852,7 +891,7 @@ export default function Console() {
             epoch={epoch}
             movers={visible}
             selectedId={effectiveSelectedId}
-            onSelect={setSelectedId}
+            onSelect={selectMover}
             onViewChange={setView}
             onGeometry={onGeometry}
             aDate={epoch1}
@@ -860,26 +899,6 @@ export default function Console() {
             showGrid={showGrid}
             busy={status !== "ready" && status !== "error"}
           />
-
-          {activeExample && (
-            <div className="pointer-events-none absolute inset-x-0 top-14 flex justify-center px-6">
-              <div className="max-w-[560px] rounded-md border border-[var(--deck-line)] px-4 py-2.5 text-center" style={{ background: "var(--deck-panel)" }}>
-                <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--deck-accent)]">
-                  Example · {getField(activeExample.fieldId).members[0]?.label ?? activeExample.fieldId}
-                </p>
-                <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--deck-text)]">
-                  {demoBeat !== null && DEMO_BEATS[demoBeat]
-                    ? DEMO_BEATS[demoBeat].caption
-                    : activeExample.why}
-                </p>
-                {demoBeat !== null && (
-                  <p className="mt-1.5 font-mono text-[9px] text-[var(--deck-dim)]">
-                    step {demoBeat + 1} of {DEMO_BEATS.length} · {DEMO_BEATS[demoBeat]?.mode}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
 
           <div className="pointer-events-none absolute left-5 top-5 font-mono text-[10px] text-[var(--deck-dim)]">
             <p>α {formatRa(centre.ra)}</p>
@@ -957,12 +976,12 @@ export default function Console() {
             onDismiss={intro.dismiss}
             onStart={() => {
               intro.dismiss();
-              setPlaying(true);
+              runExample(EXAMPLES[0]);
             }}
           />
 
           {selected && motion && (
-            <div className="absolute bottom-5 left-1/2 w-[min(540px,calc(100%-2.5rem))] -translate-x-1/2 rounded-lg border border-[var(--deck-line)] p-4" style={{ background: "var(--deck-panel)" }}>
+            <div className="pointer-events-auto absolute bottom-5 left-1/2 z-30 w-[min(540px,calc(100%-2.5rem))] -translate-x-1/2 rounded-lg border border-[var(--deck-line)] p-4" style={{ background: "var(--deck-panel)" }}>
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <h3 className="truncate text-[14px] font-medium">{selected.name}</h3>
@@ -973,8 +992,17 @@ export default function Console() {
                       : ""}
                   </p>
                 </div>
-                <button onClick={() => setSelectedId(null)} className="text-[var(--deck-dim)] hover:text-[var(--deck-text)]" aria-label="Close">
-                  ✕
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectionClosed(true);
+                    setSelectedId(null);
+                  }}
+                  className="grid size-8 shrink-0 place-items-center rounded-md text-[var(--deck-dim)] hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
+                  aria-label="Close selected object"
+                  title="Close selected object"
+                >
+                  <X className="size-4" />
                 </button>
               </div>
 
@@ -1078,7 +1106,7 @@ function BandSlider({ band, onChange }: { band: number; onChange: (n: number) =>
           title="Previous band"
           className="grid size-9 shrink-0 place-items-center rounded-md border border-[var(--deck-line)] text-[15px] text-[var(--deck-muted)] transition-colors hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)] disabled:opacity-30 disabled:hover:bg-transparent"
         >
-          ◀
+          <ChevronLeft className="size-4" />
         </button>
 
         <div className="relative flex-1">
@@ -1110,13 +1138,13 @@ function BandSlider({ band, onChange }: { band: number; onChange: (n: number) =>
           title="Next band"
           className="grid size-9 shrink-0 place-items-center rounded-md border border-[var(--deck-line)] text-[15px] text-[var(--deck-muted)] transition-colors hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)] disabled:opacity-30 disabled:hover:bg-transparent"
         >
-          ▶
+          <ChevronRight className="size-4" />
         </button>
       </div>
 
       <div className="flex items-baseline justify-between pl-11 pr-11 text-[10px] text-[var(--deck-dim)]">
-        <span>◀ shorter · {BAND_WAVELENGTHS[0].toFixed(2)} µm</span>
-        <span>{BAND_WAVELENGTHS[BAND_COUNT - 1].toFixed(2)} µm · longer ▶</span>
+        <span className="inline-flex items-center gap-1"><ChevronLeft className="size-3" /> shorter · {BAND_WAVELENGTHS[0].toFixed(2)} µm</span>
+        <span className="inline-flex items-center gap-1">{BAND_WAVELENGTHS[BAND_COUNT - 1].toFixed(2)} µm · longer <ChevronRight className="size-3" /></span>
       </div>
     </div>
   );

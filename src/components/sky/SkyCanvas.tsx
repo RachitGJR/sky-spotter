@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { deproject, formatDec, formatRa, project, type SkyPoint } from "@/lib/spherex/astro";
 import type { SkyPlane, SpherexHeader } from "@/lib/spherex/archive";
 import type { Mover } from "@/lib/spherex/movers";
@@ -104,6 +105,8 @@ export function SkyCanvas({
   const backdropRef = useRef<HTMLCanvasElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; view: View } | null>(null);
   const draggedRef = useRef(false);
+  const pendingViewRef = useRef<View | null>(null);
+  const moveFrameRef = useRef<number | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   /**
    * Where the pointer is, in the view the pixels were drawn for. A dot and a
@@ -160,6 +163,10 @@ export function SkyCanvas({
     });
     observer.observe(el);
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => () => {
+    if (moveFrameRef.current !== null) window.cancelAnimationFrame(moveFrameRef.current);
   }, []);
 
   /* ---------------------------------------------------------------- *
@@ -670,6 +677,7 @@ export function SkyCanvas({
     }
     dragRef.current = { x: event.clientX, y: event.clientY, view: drawnRef.current ?? view };
     draggedRef.current = false;
+    setHover(null);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
@@ -678,7 +686,7 @@ export function SkyCanvas({
     if (rect && size.w >= 8) {
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
-      if (x >= 0 && x <= size.w && y >= 0 && y <= size.h) {
+      if (!dragRef.current && x >= 0 && x <= size.w && y >= 0 && y <= size.h) {
         setHover({ x, y, p: skyAt(x, y) });
       } else {
         setHover(null);
@@ -691,14 +699,28 @@ export function SkyCanvas({
     }
     const dRa = -((event.clientX - drag.x) / rect.width) * drag.view.fovDeg * (rect.width / rect.height);
     const dDec = ((event.clientY - drag.y) / rect.height) * drag.view.fovDeg;
-    onViewChange({
+    pendingViewRef.current = {
       ...drag.view,
       ra: ((drag.view.ra + dRa + 180) % 360 + 360) % 360 - 180,
       dec: Math.max(-89.9, Math.min(89.9, drag.view.dec + dDec)),
-    });
+    };
+    if (moveFrameRef.current === null) {
+      moveFrameRef.current = window.requestAnimationFrame(() => {
+        moveFrameRef.current = null;
+        if (pendingViewRef.current) onViewChange(pendingViewRef.current);
+      });
+    }
   };
 
   const endDrag = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (moveFrameRef.current !== null) {
+      window.cancelAnimationFrame(moveFrameRef.current);
+      moveFrameRef.current = null;
+    }
+    if (pendingViewRef.current) {
+      onViewChange(pendingViewRef.current);
+      pendingViewRef.current = null;
+    }
     if (dragRef.current) event.currentTarget.releasePointerCapture(event.pointerId);
     dragRef.current = null;
   };
@@ -754,11 +776,8 @@ export function SkyCanvas({
         />
       </div>
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4">
-        <div className="rounded-sm bg-background/75 px-2 py-1 font-mono text-[11px] tracking-wide text-muted-foreground backdrop-blur-sm">
-          {compare === "blink" ? (epoch === 0 ? a.label : b.label) : compare === "split" ? `${a.short} / ${b.short}` : `${a.short} vs ${b.short}`}
-        </div>
         {busy && (
-          <div className="rounded-sm bg-background/75 px-2 py-1 font-mono text-[11px] text-muted-foreground backdrop-blur-sm">
+          <div className="ml-auto rounded-sm bg-background/75 px-2 py-1 font-mono text-[11px] text-muted-foreground backdrop-blur-sm">
             reading archive…
           </div>
         )}
@@ -791,7 +810,7 @@ export function SkyCanvas({
           style={{ background: "var(--deck-panel)", borderColor: "var(--deck-line)", color: "var(--deck-text)" }}
         >
           <span className="opacity-70">next</span>
-          <span aria-hidden>▶</span>
+          <ChevronRight aria-hidden className="size-3.5" />
         </button>
       )}
 

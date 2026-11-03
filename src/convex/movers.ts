@@ -8,6 +8,22 @@ import { v } from "convex/values";
 import { action, internalMutation, query, type ActionCtx } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 
+const MAX_DESIGNATIONS = 64;
+const MAX_DESIGNATION_LENGTH = 80;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function validateRequest(designations: string[], date1: string, date2: string) {
+  if (designations.length > MAX_DESIGNATIONS) {
+    throw new Error(`A maximum of ${MAX_DESIGNATIONS} designations may be requested.`);
+  }
+  if (![date1, date2].every((date) => DATE_PATTERN.test(date) && !Number.isNaN(Date.parse(`${date}T00:00:00Z`)))) {
+    throw new Error("Dates must use the YYYY-MM-DD format.");
+  }
+  if (designations.some((designation) => designation.length === 0 || designation.length > MAX_DESIGNATION_LENGTH)) {
+    throw new Error(`Each designation must be between 1 and ${MAX_DESIGNATION_LENGTH} characters.`);
+  }
+}
+
 // Two browser tabs (or a dev-mode double effect) can ask for the same epoch pair
 // at the same moment and both decide the cache is cold. `.first()` rather than
 // `.unique()` so a duplicated row can never turn into a hard failure.
@@ -115,6 +131,7 @@ export const getMovers = action({
     date2: v.string(),
   },
   handler: async (ctx, args) => {
+    validateRequest(args.designations, args.date1, args.date2);
     const found = new Map<string, Normalised | null>();
     let outstanding = [...args.designations];
 
