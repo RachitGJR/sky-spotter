@@ -1,8 +1,8 @@
 /**
  * UI Component Registry
  *
- * This file provides organized exports of all UI components to help AI agents
- * and developers find and import only the components they need.
+ * This file provides organized exports of all UI components to help developers
+ * find and import only the components they need.
  *
  * Components are grouped by category and include bundle size hints:
  * - Small (<5KB): Basic components with minimal dependencies
@@ -93,7 +93,7 @@ export { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLe
 export { Toaster } from "./sonner"; // ~8KB - Toast notifications
 
 // ============================================================================
-// USAGE EXAMPLES FOR AI AGENTS
+// USAGE EXAMPLES
 // ============================================================================
 
 /**
@@ -126,7 +126,7 @@ export { Toaster } from "./sonner"; // ~8KB - Toast notifications
  */
 
 // ============================================================================
-// OPTIMIZATION TIPS FOR AI AGENTS
+// OPTIMIZATION TIPS
 // ============================================================================
 
 /**
