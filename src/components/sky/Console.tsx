@@ -20,6 +20,7 @@ import {
 import {
   AllSkyLocator,
   BeginnerGuide,
+  Discovery,
   DiscoveryLog,
   ExplainerDialog,
   LogDialog,
@@ -262,7 +263,193 @@ function WelcomePage({ onStart, onLearn }: { onStart: () => void; onLearn: () =>
             </div>
           ))}
         </div>
+        <section className="mt-10 w-full max-w-4xl rounded-3xl border border-blue-100 bg-blue-50/70 p-6 text-left sm:p-8">
+          <h2 className="text-xl font-semibold text-slate-900">What can you do here?</h2>
+          <ul className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
+            {[
+              "See real pictures from NASA's SPHEREx telescope",
+              "Watch asteroids and comets move between two dates",
+              "Choose a friendly example instead of starting from nothing",
+              "Tap, click, or use the keyboard — no tiny controls",
+              "Learn what you are seeing in plain language",
+              "Save discoveries to your own logbook",
+            ].map((feature) => (
+              <li key={feature} className="flex items-start gap-2">
+                <Check className="mt-0.5 size-4 shrink-0 text-blue-600" />
+                <span>{feature}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       </main>
+    </div>
+  );
+}
+
+function SimpleExplorer({
+  field,
+  epochA,
+  epochB,
+  expA,
+  expB,
+  status,
+  error,
+  compare,
+  setCompare,
+  epoch,
+  setEpoch,
+  playing,
+  setPlaying,
+  movers,
+  selected,
+  selectedId,
+  onSelect,
+  view,
+  setView,
+  geometry,
+  onGeometry,
+  runExample,
+  setFieldId,
+  onMoreControls,
+  guideOpen,
+  setGuideOpen,
+  entries,
+  updateDiscoveries,
+  focusMover,
+  baseline,
+}: {
+  field: ReturnType<typeof getField>;
+  epochA: SurveyEpoch;
+  epochB: SurveyEpoch;
+  expA: { header: SpherexHeader | null; plane: SkyPlane | null };
+  expB: { header: SpherexHeader | null; plane: SkyPlane | null };
+  status: string;
+  error: string | null;
+  compare: Compare;
+  setCompare: (v: Compare) => void;
+  epoch: 0 | 1;
+  setEpoch: (v: 0 | 1) => void;
+  playing: boolean;
+  setPlaying: (v: boolean) => void;
+  movers: Mover[];
+  selected: Mover | null;
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+  view: View;
+  setView: (v: View) => void;
+  geometry: { fitFov: number; maxFov: number };
+  onGeometry: (v: { fitFov: number; maxFov: number }) => void;
+  runExample: (v: Example) => void;
+  setFieldId: (v: string) => void;
+  onMoreControls: () => void;
+  guideOpen: boolean;
+  setGuideOpen: (v: boolean) => void;
+  entries: Discovery[];
+  updateDiscoveries: (v: Discovery[]) => void;
+  focusMover: (v: Mover) => void;
+  baseline: number;
+}) {
+  return (
+    <div className="simple-app min-h-screen">
+      <header className="simple-header">
+        <button type="button" className="flex items-center gap-2 text-left" onClick={onMoreControls}>
+          <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" aria-hidden="true" className="size-9 rounded-full" />
+          <span>
+            <strong className="block text-sm">Sky Spotter</strong>
+            <span className="block text-xs text-slate-500">Find what moves</span>
+          </span>
+        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" className="simple-header-button" onClick={() => setGuideOpen(true)}>Help</button>
+          <DiscoveryLog entries={entries} onChange={updateDiscoveries} />
+          <button type="button" className="simple-header-button" onClick={onMoreControls}>More controls</button>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-10">
+        <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+          <div>
+            <p className="text-sm font-semibold text-blue-600">STEP 1 OF 3</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">Choose a sky story</h1>
+            <p className="mt-2 max-w-xl text-slate-600">Pick one. We will show you two pictures and help you find what changed.</p>
+          </div>
+          <button type="button" className="simple-help-button" onClick={() => setGuideOpen(true)}>I need help</button>
+        </div>
+
+        <div className="simple-story-row" aria-label="Choose a sky story">
+          {EXAMPLES.slice(0, 3).map((example) => {
+            const active = example.fieldId === field.id && epochA.date === getField(example.fieldId).epochs[example.a].date;
+            return (
+              <button
+                type="button"
+                key={example.id}
+                onClick={() => runExample(example)}
+                className={`simple-story-card ${active ? "simple-story-card-active" : ""}`}
+              >
+                <span className="simple-story-icon" aria-hidden="true">✦</span>
+                <span className="block text-left text-base font-semibold text-slate-900">{getField(example.fieldId).members[0]?.label}</span>
+                <span className="mt-1 block text-left text-sm text-slate-600">{example.days} days apart · {example.why.split(".")[0]}.</span>
+                <span className="mt-3 block text-left text-sm font-semibold text-blue-700">{active ? "Showing this story" : "Show me →"}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <section className="simple-viewer-card mt-6">
+          <div className="flex flex-col justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:px-6">
+            <div>
+              <p className="text-sm font-semibold text-blue-600">STEP 2 OF 3</p>
+              <h2 className="mt-1 text-xl font-semibold text-slate-950">Look at the sky</h2>
+              <p className="mt-1 text-sm text-slate-600">{field.name} · {epochA.date} and {epochB.date} · {baseline} days apart</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={`simple-choice ${compare === "blink" ? "simple-choice-active" : ""}`} onClick={() => setCompare("blink")}>Blink</button>
+              <button type="button" className={`simple-choice ${compare === "split" ? "simple-choice-active" : ""}`} onClick={() => setCompare("split")}>Side by side</button>
+              <button type="button" className={`simple-play ${playing ? "simple-play-active" : ""}`} onClick={() => setPlaying(!playing)}>
+                {playing ? "Pause" : "Play"}
+              </button>
+            </div>
+          </div>
+          <div className="simple-canvas-wrap">
+            <SkyCanvas
+              a={{ header: expA.header, plane: expA.plane, label: `A · ${epochA.date}`, short: `A · ${epochA.date}` }}
+              b={{ header: expB.header, plane: expB.plane, label: `B · ${epochB.date}`, short: `B · ${epochB.date}` }}
+              compare={compare}
+              view={view}
+              tone="ink"
+              epoch={epoch}
+              movers={movers}
+              selectedId={selectedId}
+              onSelect={onSelect}
+              aDate={epochA.date}
+              bDate={epochB.date}
+              onViewChange={setView}
+              onGeometry={onGeometry}
+              showGrid={false}
+              busy={status !== "ready"}
+            />
+            {status === "error" && <p className="absolute inset-0 grid place-items-center bg-slate-950/90 p-8 text-center text-sm text-white">{error}</p>}
+            {status !== "ready" && status !== "error" && <p className="absolute inset-0 grid place-items-center text-sm text-white">Loading a real sky picture…</p>}
+          </div>
+        </section>
+
+        <section className="simple-next-card mt-6">
+          <div>
+            <p className="text-sm font-semibold text-blue-600">STEP 3 OF 3</p>
+            <h2 className="mt-1 text-xl font-semibold text-slate-950">{selected ? `You found ${selected.name}!` : "Can you find the moving dot?"}</h2>
+            <p className="mt-1 text-sm text-slate-600">{selected ? "Tap the button below to keep this discovery." : "Stars stay still. An asteroid or comet moves."}</p>
+          </div>
+          {selected ? (
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="simple-primary-small" onClick={() => focusMover(selected)}>Show me the movement</button>
+              <button type="button" className="simple-secondary-small" onClick={() => setGuideOpen(true)}>Tell me more</button>
+            </div>
+          ) : (
+            <span className="simple-tip">Click a bright ring in the picture</span>
+          )}
+        </section>
+      </main>
+      <BeginnerGuide open={guideOpen} onOpenChange={setGuideOpen} />
     </div>
   );
 }
@@ -353,6 +540,7 @@ function useExposure(epoch: SurveyEpoch | undefined) {
 
 export default function Console() {
   const [activeNav, setActiveNav] = useState<"explore" | "learn">("explore");
+  const [simpleMode, setSimpleMode] = useState(true);
   const [showWelcome, setShowWelcome] = useState(() => {
     try {
       return localStorage.getItem("sky-spotter.started") !== "yes";
@@ -435,6 +623,7 @@ export default function Console() {
       // The app remains usable when browser storage is unavailable.
     }
     setShowWelcome(false);
+    setSimpleMode(true);
     runExample(EXAMPLES[0]);
   }, [runExample]);
 
@@ -643,6 +832,43 @@ export default function Console() {
           setShowWelcome(false);
           setGuideOpen(true);
         }}
+      />
+    );
+  }
+
+  if (simpleMode) {
+    return (
+      <SimpleExplorer
+        field={field}
+        epochA={epochA}
+        epochB={epochB}
+        expA={expA}
+        expB={expB}
+        status={status}
+        error={error}
+        compare={compare}
+        setCompare={setCompare}
+        epoch={epoch}
+        setEpoch={setEpoch}
+        playing={playing}
+        setPlaying={setPlaying}
+        movers={movers}
+        selected={selected}
+        selectedId={effectiveSelectedId}
+        onSelect={selectMover}
+        view={view}
+        setView={setView}
+        geometry={geometry}
+        onGeometry={onGeometry}
+        runExample={runExample}
+        setFieldId={setFieldId}
+        onMoreControls={() => setSimpleMode(false)}
+        guideOpen={guideOpen}
+        setGuideOpen={setGuideOpen}
+        entries={entries}
+        updateDiscoveries={updateDiscoveries}
+        focusMover={focusMover}
+        baseline={baseline}
       />
     );
   }
