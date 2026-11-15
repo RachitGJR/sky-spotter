@@ -214,9 +214,17 @@ function Readout({ rows }: { rows: [string, string][] }) {
   );
 }
 
-function WelcomePage({ onStart, onLearn }: { onStart: () => void; onLearn: () => void }) {
+function ThemeButton({ theme, onToggle }: { theme: "light" | "dark"; onToggle: () => void }) {
   return (
-    <div className="welcome-page min-h-screen overflow-auto">
+    <button type="button" className="theme-button" onClick={onToggle} aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}>
+      {theme === "light" ? "☾ Dark" : "☀ Light"}
+    </button>
+  );
+}
+
+function WelcomePage({ onStart, onLearn, theme, onToggleTheme }: { onStart: () => void; onLearn: () => void; theme: "light" | "dark"; onToggleTheme: () => void }) {
+  return (
+    <div className={`welcome-page ${theme} min-h-screen overflow-auto`}>
       <header className="welcome-header">
         <div className="flex items-center gap-3">
           <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" aria-hidden="true" className="size-10 rounded-full" />
@@ -225,9 +233,10 @@ function WelcomePage({ onStart, onLearn }: { onStart: () => void; onLearn: () =>
             <p className="text-sm text-slate-500">A friendly way to explore space</p>
           </div>
         </div>
-        <button type="button" className="welcome-link" onClick={onLearn}>
-          How does it work?
-        </button>
+        <div className="flex items-center gap-2">
+          <ThemeButton theme={theme} onToggle={onToggleTheme} />
+          <button type="button" className="welcome-link" onClick={onLearn}>How does it work?</button>
+        </div>
       </header>
 
       <main className="mx-auto flex w-full max-w-5xl flex-col items-center px-5 pb-16 pt-12 text-center sm:pt-20">
@@ -320,6 +329,8 @@ function SimpleExplorer({
   targetName,
   coordinates,
   onCoordinates,
+  theme,
+  onToggleTheme,
 }: {
   field: ReturnType<typeof getField>;
   epochA: SurveyEpoch;
@@ -354,6 +365,8 @@ function SimpleExplorer({
   targetName: string;
   coordinates: { ra: string; dec: string };
   onCoordinates: (coordinates: { ra: string; dec: string }, name?: string) => void;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
 }) {
   const challengeTargets = [
     { name: "Barnard's Star", hint: "A nearby star", ra: "17:57:48.50", dec: "+04:41:36.1" },
@@ -381,7 +394,7 @@ function SimpleExplorer({
   };
 
   return (
-    <div className="simple-app min-h-screen">
+    <div className={`simple-app ${theme} min-h-screen`}>
       <header className="simple-header">
         <button type="button" className="flex items-center gap-2 text-left" onClick={onMoreControls}>
           <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" aria-hidden="true" className="size-9 rounded-full" />
@@ -391,6 +404,7 @@ function SimpleExplorer({
           </span>
         </button>
         <div className="flex items-center gap-2">
+          <ThemeButton theme={theme} onToggle={onToggleTheme} />
           <button type="button" className="simple-header-button" onClick={() => setGuideOpen(true)}>Help</button>
           <DiscoveryLog entries={entries} onChange={updateDiscoveries} />
           <button type="button" className="simple-header-button" onClick={onMoreControls}>More controls</button>
@@ -595,6 +609,13 @@ function useExposure(epoch: SurveyEpoch | undefined) {
 export default function Console() {
   const [activeNav, setActiveNav] = useState<"explore" | "learn">("explore");
   const [simpleMode, setSimpleMode] = useState(true);
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    try {
+      return localStorage.getItem("sky-spotter.theme") === "dark" ? "dark" : "light";
+    } catch {
+      return "light";
+    }
+  });
   const [targetName, setTargetName] = useState("WISE 0855");
   const [coordinates, setCoordinates] = useState({ ra: "08:55:10.831", dec: "-07:14:42.53" });
   const [showWelcome, setShowWelcome] = useState(() => {
@@ -644,8 +665,13 @@ export default function Console() {
 
   // The console is a dark instrument; make every shared dialog and sheet follow.
   useEffect(() => {
-    document.documentElement.classList.add("dark");
-  }, []);
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    try {
+      localStorage.setItem("sky-spotter.theme", theme);
+    } catch {
+      // Theme still applies for this visit when storage is unavailable.
+    }
+  }, [theme]);
 
   /* --- worked examples --------------------------------------------------- */
   // A first-time citizen has four fields, sixteen exposures and no reason to look at
@@ -888,6 +914,8 @@ export default function Console() {
           setShowWelcome(false);
           setGuideOpen(true);
         }}
+        theme={theme}
+        onToggleTheme={() => setTheme((value) => (value === "light" ? "dark" : "light"))}
       />
     );
   }
@@ -931,6 +959,8 @@ export default function Console() {
           setCoordinates(next);
           if (name) setTargetName(name);
         }}
+        theme={theme}
+        onToggleTheme={() => setTheme((value) => (value === "light" ? "dark" : "light"))}
       />
     );
   }

@@ -28,6 +28,72 @@
   color: #0f172a;
 }
 
+.welcome-page.dark,
+.simple-app.dark {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.welcome-page.dark .welcome-header,
+.simple-app.dark .simple-header {
+  border-color: #273449;
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.welcome-page.dark h1,
+.welcome-page.dark h2,
+.welcome-page.dark p,
+.simple-app.dark h1,
+.simple-app.dark h2,
+.simple-app.dark strong,
+.simple-app.dark label {
+  color: #f8fafc;
+}
+
+.welcome-page.dark .text-slate-500,
+.welcome-page.dark .text-slate-600,
+.simple-app.dark .text-slate-500,
+.simple-app.dark .text-slate-600 {
+  color: #cbd5e1;
+}
+
+.welcome-page.dark .welcome-card,
+.welcome-page.dark section,
+.simple-app.dark .simple-story-card,
+.simple-app.dark .simple-viewer-card,
+.simple-app.dark .simple-next-card,
+.simple-app.dark .coordinate-box {
+  border-color: #334155;
+  background: #172033;
+}
+
+.welcome-page.dark .welcome-card-number,
+.simple-app.dark .coordinate-details summary {
+  background: #263b63;
+  color: #bfdbfe;
+}
+
+.theme-button {
+  min-height: 44px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: transparent;
+  padding: 0.6rem 0.85rem;
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.theme-button:hover {
+  background: #eaf2ff;
+  color: #1d4ed8;
+}
+
+.dark .theme-button {
+  border-color: #475569;
+  color: #e2e8f0;
+}
+
 .welcome-header {
   display: flex;
   align-items: center;
@@ -488,7 +554,7 @@ header button {
   background: transparent;
 }
 
-.simple-canvas-wrap > div {
+.simple-canvas-wrap > div.relative {
   height: 100%;
 }
 
