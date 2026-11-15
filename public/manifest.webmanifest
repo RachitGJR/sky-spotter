@@ -1,16 +1,16 @@
 {
-  "name": "freebuff.com application",
-  "short_name": "freebuff.com",
-  "description": "freebuff.com application",
+  "name": "Sky Spotter",
+  "short_name": "Sky Spotter",
+  "description": "Explore, compare, and discover moving worlds.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#000000",
   "icons": [
     {
-      "src": "/logo.svg",
+      "src": "./logo.png",
       "sizes": "any",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any"
     }
   ]

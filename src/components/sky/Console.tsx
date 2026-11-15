@@ -535,7 +535,11 @@ export default function Console() {
       {/* ---------------------------------------------------------- top bar */}
       <header className="flex min-w-0 shrink-0 flex-wrap items-center gap-3 overflow-hidden border-b border-[var(--deck-line-soft)] px-5 py-2.5">
         <div className="flex shrink-0 items-baseline gap-2.5">
-          <Aperture className="size-4 translate-y-0.5 text-[var(--deck-accent)]" />
+        <img
+          src={`${import.meta.env.BASE_URL}logo.png`}
+          alt="SPHEREx logo"
+          className="size-6 rounded-full object-cover"
+        />
           <span className="text-[12px] font-semibold uppercase tracking-[0.22em]">SPHEREx</span>
           <span className="text-[12px] text-[var(--deck-dim)]">Blink Comparator</span>
         </div>
