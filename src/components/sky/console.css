@@ -331,6 +331,32 @@ header button {
   padding: 0.75rem;
 }
 
+.coordinate-details {
+  margin-top: 0.75rem;
+  color: #475569;
+  font-size: 0.875rem;
+}
+
+.coordinate-details summary {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  cursor: pointer;
+  border-radius: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  font-weight: 600;
+}
+
+.coordinate-details summary:hover {
+  background: #eaf2ff;
+  color: #1d4ed8;
+}
+
+.coordinate-details > p {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+}
+
 .coordinate-box label {
   color: #475569;
   font-size: 0.75rem;

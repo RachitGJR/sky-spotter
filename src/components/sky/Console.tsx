@@ -356,11 +356,11 @@ function SimpleExplorer({
   onCoordinates: (coordinates: { ra: string; dec: string }, name?: string) => void;
 }) {
   const challengeTargets = [
-    { name: "Barnard's Star", ra: "17:57:48.50", dec: "+04:41:36.1" },
-    { name: "Epsilon Indi B", ra: "21:04:34.80", dec: "-56:46:50.0" },
-    { name: "WISE 0855", ra: "08:55:10.831", dec: "-07:14:42.53" },
-    { name: "RW Aurigae", ra: "05:07:49.57", dec: "+30:24:05.0" },
-    { name: "R Draconis", ra: "16:32:40.76", dec: "+66:45:36.7" },
+    { name: "Barnard's Star", hint: "A nearby star", ra: "17:57:48.50", dec: "+04:41:36.1" },
+    { name: "Epsilon Indi B", hint: "A tiny brown star", ra: "21:04:34.80", dec: "-56:46:50.0" },
+    { name: "WISE 0855", hint: "A cold, fast world", ra: "08:55:10.831", dec: "-07:14:42.53" },
+    { name: "RW Aurigae", hint: "A star that changes", ra: "05:07:49.57", dec: "+30:24:05.0" },
+    { name: "R Draconis", hint: "A star that brightens", ra: "16:32:40.76", dec: "+66:45:36.7" },
   ];
 
   const parseAngle = (value: string, isRa: boolean) => {
@@ -401,19 +401,11 @@ function SimpleExplorer({
         <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
             <p className="text-sm font-semibold text-blue-600">STEP 1 OF 3</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">Choose a place in the sky</h1>
-            <p className="mt-2 max-w-xl text-slate-600">Try one of the challenge targets, or enter your own coordinates.</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">Pick a target</h1>
+            <p className="mt-2 max-w-xl text-slate-600">Tap any card. You do not need to know anything about space.</p>
           </div>
           <button type="button" className="simple-help-button" onClick={() => setGuideOpen(true)}>I need help</button>
         </div>
-
-        <form className="coordinate-box" onSubmit={submitCoordinates}>
-          <label htmlFor="ra-input">Right ascension</label>
-          <input id="ra-input" value={coordinates.ra} onChange={(event) => onCoordinates({ ...coordinates, ra: event.target.value })} placeholder="08:55:10.831" />
-          <label htmlFor="dec-input">Declination</label>
-          <input id="dec-input" value={coordinates.dec} onChange={(event) => onCoordinates({ ...coordinates, dec: event.target.value })} placeholder="-07:14:42.53" />
-          <button type="submit" className="simple-primary-small">Show this sky</button>
-        </form>
 
         <div className="simple-story-row" aria-label="Challenge targets">
           {challengeTargets.map((target) => {
@@ -430,20 +422,30 @@ function SimpleExplorer({
               >
                 <span className="simple-story-icon" aria-hidden="true">✦</span>
                 <span className="block text-left text-base font-semibold text-slate-900">{target.name}</span>
-                <span className="mt-1 block text-left font-mono text-xs text-slate-500">{target.ra} · {target.dec}</span>
+                <span className="mt-1 block text-left text-sm text-slate-600">{target.hint}</span>
                 <span className="mt-3 block text-left text-sm font-semibold text-blue-700">{active ? "Showing this target" : "Show me →"}</span>
               </button>
             );
           })}
         </div>
-        <p className="mt-3 text-xs text-slate-500">The viewer keeps the real SPHEREx image series loaded while you frame the location you want to inspect.</p>
+        <details className="coordinate-details">
+          <summary>I have coordinates</summary>
+          <p>Coordinates are a way to name a place in the sky. You can skip this and use a card above.</p>
+          <form className="coordinate-box" onSubmit={submitCoordinates}>
+            <label htmlFor="ra-input">Sky address 1</label>
+            <input id="ra-input" value={coordinates.ra} onChange={(event) => onCoordinates({ ...coordinates, ra: event.target.value })} placeholder="08:55:10.831" />
+            <label htmlFor="dec-input">Sky address 2</label>
+            <input id="dec-input" value={coordinates.dec} onChange={(event) => onCoordinates({ ...coordinates, dec: event.target.value })} placeholder="-07:14:42.53" />
+            <button type="submit" className="simple-primary-small">Show this sky</button>
+          </form>
+        </details>
 
         <section className="simple-viewer-card mt-6">
           <div className="flex flex-col justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:px-6">
             <div>
               <p className="text-sm font-semibold text-blue-600">STEP 2 OF 3</p>
               <h2 className="mt-1 text-xl font-semibold text-slate-950">Look at the sky</h2>
-              <p className="mt-1 text-sm text-slate-600">{field.name} · {epochA.date} and {epochB.date} · {baseline} days apart</p>
+              <p className="mt-1 text-sm text-slate-600">Watch the picture. If one dot jumps, click it.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" className={`simple-choice ${compare === "blink" ? "simple-choice-active" : ""}`} onClick={() => setCompare("blink")}>Blink</button>
@@ -488,7 +490,7 @@ function SimpleExplorer({
               <button type="button" className="simple-secondary-small" onClick={() => setGuideOpen(true)}>Tell me more</button>
             </div>
           ) : (
-            <span className="simple-tip">Click a bright ring in the picture</span>
+            <span className="simple-tip">Look for a dot that jumps</span>
           )}
         </section>
       </main>
