@@ -523,34 +523,49 @@ export function SkyCanvas({
     }
 
     const label = dark ? "rgba(255,255,255,0.55)" : "rgba(17,17,19,0.5)";
-    const showVectors = compare === "blink" || compare === "split";
-    for (const mover of movers) {
+    for (const [moverIndex, mover] of movers.entries()) {
       const pa = mover.epoch1;
       const pb = mover.epoch2;
       const p = epoch === 0 ? pa : pb;
       const s = screenOf(p);
+      const other = screenOf(epoch === 0 ? pb : pa);
       const selected = mover.id === selectedId;
+      const marker = String(moverIndex + 1);
 
-      if (showVectors) {
-        const t = screenOf(epoch === 0 ? pb : pa);
+      ctx.save();
+      ctx.strokeStyle = selected ? ACCENT : dark ? "rgba(194,112,61,0.75)" : "rgba(160,80,32,0.7)";
+      ctx.lineWidth = selected ? 1.6 : 1.1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(other.x, other.y);
+      ctx.stroke();
+      ctx.restore();
+
+      // Mark both ends with the same number: the letter identifies the
+      // observation, while the number identifies the object across observations.
+      for (const [point, observation] of [
+        [s, epoch === 0 ? "A" : "B"],
+        [other, epoch === 0 ? "B" : "A"],
+      ] as const) {
+        const endpointInside =
+          point.x > -24 && point.x < size.w + 24 && point.y > -24 && point.y < size.h + 24;
+        if (!endpointInside) continue;
         ctx.save();
-        ctx.strokeStyle = selected ? ACCENT : dark ? "rgba(194,112,61,0.75)" : "rgba(160,80,32,0.7)";
-        ctx.lineWidth = selected ? 1.6 : 1.1;
-        ctx.setLineDash([4, 4]);
         ctx.beginPath();
-        ctx.moveTo(s.x, s.y);
-        ctx.lineTo(t.x, t.y);
+        ctx.arc(point.x, point.y, point === s ? (selected ? 11 : 8) : 6, 0, Math.PI * 2);
+        ctx.strokeStyle = point === s ? ACCENT : dark ? "rgba(194,112,61,0.9)" : "rgba(160,80,32,0.85)";
+        ctx.lineWidth = point === s && selected ? 1.8 : 1.1;
+        ctx.setLineDash(point === s ? [] : [2, 2]);
         ctx.stroke();
+        ctx.font = "10px ui-monospace, SFMono-Regular, Menlo, monospace";
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.fillText(`${marker}${observation}`, point.x + 9, point.y - 8);
         ctx.restore();
       }
 
       const inside = s.x > -20 && s.x < size.w + 20 && s.y > -20 && s.y < size.h + 20;
       if (inside) {
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, selected ? 11 : 8, 0, Math.PI * 2);
-        ctx.strokeStyle = ACCENT;
-        ctx.lineWidth = selected ? 1.8 : 1.2;
-        ctx.stroke();
         if (selected) {
           ctx.beginPath();
           ctx.arc(s.x, s.y, 2, 0, Math.PI * 2);
@@ -566,7 +581,7 @@ export function SkyCanvas({
         ctx.font = "11px ui-sans-serif, system-ui, sans-serif";
         ctx.fillStyle = selected ? ACCENT : label;
         ctx.fillText(mover.name.replace(/^\d+\s*/, ""), s.x + 11, s.y - 9);
-      } else if (showVectors) {
+      } else {
         const cx = size.w / 2;
         const cy = size.h / 2;
         const ang = Math.atan2(s.y - cy, s.x - cx);
@@ -776,6 +791,14 @@ export function SkyCanvas({
         />
       </div>
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4">
+        {movers.length > 0 && (
+          <div
+            className="rounded-sm px-2 py-1 font-mono text-[10px] leading-tight backdrop-blur-sm"
+            style={{ background: "var(--deck-panel)", color: "var(--deck-muted)" }}
+          >
+            Same number = same object · A/B = observation
+          </div>
+        )}
         {busy && (
           <div className="ml-auto rounded-sm bg-background/75 px-2 py-1 font-mono text-[11px] text-muted-foreground backdrop-blur-sm">
             reading archive…
@@ -818,8 +841,8 @@ export function SkyCanvas({
       <Hint
         text={
           movers.length > 1
-            ? "Drag to move the sky · scroll to zoom · tap a ring, or tap Next ▶ · tap empty sky to mark it"
-            : "Drag to move the sky · scroll to zoom · tap a ring to pick it · tap empty sky to mark it"
+            ? "Follow matching numbers (1A → 1B) · drag to move the sky · tap a ring, or tap Next ▶"
+            : "Follow the matching A/B labels · drag to move the sky · tap a ring to pick it"
         }
         show={!touched}
       />
