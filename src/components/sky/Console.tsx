@@ -222,6 +222,64 @@ function ThemeButton({ theme, onToggle }: { theme: "light" | "dark"; onToggle: (
   );
 }
 
+function MovementReview({ movers, selectedId, onReview, onFocus }: { movers: Mover[]; selectedId: string | null; onReview: (mover: Mover, moving: boolean) => void; onFocus: (mover: Mover) => void }) {
+  const [index, setIndex] = useState(0);
+  const current = movers[index % Math.max(1, movers.length)];
+  if (!current) return null;
+
+  const decide = (moving: boolean) => {
+    onReview(current, moving);
+    setIndex((value) => value + 1);
+  };
+
+  return (
+    <section className="review-card" aria-label="Review possible moving objects">
+      <div>
+        <p className="text-sm font-semibold text-blue-600">YOUR TURN</p>
+        <h2 className="mt-1 text-xl font-semibold text-slate-950 dark:text-white">Does this dot move?</h2>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+          Swipe right for <strong>moving</strong>. Swipe left for <strong>not moving</strong>.
+        </p>
+      </div>
+      <div className="review-object">
+        <span className="review-spark" aria-hidden="true">✦</span>
+        <strong>{current.name}</strong>
+        <span>{index + 1} of {movers.length} possible objects</span>
+      </div>
+      <div className="flex flex-wrap justify-center gap-2">
+        <button type="button" className="review-action review-no" onClick={() => decide(false)} aria-label="Mark as not moving">← Not moving</button>
+        <button type="button" className="review-focus" onClick={() => onFocus(current)} aria-label="Zoom to this object">Zoom in</button>
+        <button type="button" className="review-action review-yes" onClick={() => decide(true)} aria-label="Mark as moving">Moving →</button>
+      </div>
+      {selectedId === current.id && <p className="mt-3 text-center text-xs text-blue-700 dark:text-blue-300">The automatic detector found this object between the two pictures.</p>}
+    </section>
+  );
+}
+
+function ConstellationGuide() {
+  const constellations = [
+    { name: "Orion", note: "Look for three bright stars in a straight line: Orion’s Belt.", pattern: "✦  ✦  ✦" },
+    { name: "Ursa Major", note: "The Big Dipper looks like a saucepan with a long handle.", pattern: "✦  ✦\n  ✦  ✦  ✦" },
+    { name: "Cassiopeia", note: "Five bright stars make a wide W shape.", pattern: "✦  ✦  ✦  ✦  ✦" },
+  ];
+  return (
+    <section className="constellation-card">
+      <p className="text-sm font-semibold text-blue-600">LOOK UP</p>
+      <h2 className="mt-1 text-xl font-semibold text-slate-950 dark:text-white">Find a constellation</h2>
+      <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Constellations are pictures made by joining stars. The stars are far apart, but the pattern helps us find them.</p>
+      <div className="constellation-grid mt-4">
+        {constellations.map((item) => (
+          <article key={item.name} className="constellation-item">
+            <p className="constellation-pattern" aria-hidden="true">{item.pattern}</p>
+            <h3>{item.name}</h3>
+            <p>{item.note}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function WelcomePage({ onStart, onLearn, theme, onToggleTheme }: { onStart: () => void; onLearn: () => void; theme: "light" | "dark"; onToggleTheme: () => void }) {
   return (
     <div className={`welcome-page ${theme} min-h-screen overflow-auto`}>
@@ -518,6 +576,20 @@ function SimpleExplorer({
             <span className="simple-tip">Look for a dot that jumps</span>
           )}
         </section>
+        <MovementReview
+          movers={movers}
+          selectedId={selectedId}
+          onReview={(mover, moving) => {
+            if (moving) {
+              onSelect(mover.id);
+              focusMover(mover);
+            } else if (selectedId === mover.id) {
+              onSelect(null);
+            }
+          }}
+          onFocus={focusMover}
+        />
+        <ConstellationGuide />
       </main>
       <BeginnerGuide open={guideOpen} onOpenChange={setGuideOpen} />
     </div>
@@ -613,10 +685,14 @@ export default function Console() {
   const [simpleMode, setSimpleMode] = useState(true);
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     try {
-      return localStorage.getItem("sky-spotter.theme") === "dark" ? "dark" : "light";
+      const saved = localStorage.getItem("sky-spotter.theme");
+      if (saved === "dark" || saved === "light") return saved;
     } catch {
-      return "light";
+      // Fall back to the device preference below.
     }
+    return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
   });
   const [targetName, setTargetName] = useState("WISE 0855");
   const [coordinates, setCoordinates] = useState({ ra: "08:55:10.831", dec: "-07:14:42.53" });
@@ -674,6 +750,14 @@ export default function Console() {
       // Theme still applies for this visit when storage is unavailable.
     }
   }, [theme]);
+
+  useEffect(() => {
+    if (localStorage.getItem("sky-spotter.theme")) return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const update = () => setTheme(media.matches ? "dark" : "light");
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
 
   /* --- worked examples --------------------------------------------------- */
   // A first-time citizen has four fields, sixteen exposures and no reason to look at
@@ -854,6 +938,13 @@ export default function Console() {
     },
     [maxFov],
   );
+
+  useEffect(() => {
+    if (!simpleMode || !activeExample || !movers.length || selectedId) return;
+    const detected = movers[0];
+    setSelectedId(detected.id);
+    focusMover(detected);
+  }, [simpleMode, activeExample, movers, selectedId, focusMover]);
 
   useEffect(() => {
     if (!follow || !selected) return;

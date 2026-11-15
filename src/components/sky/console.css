@@ -603,6 +603,116 @@ header button {
   font-weight: 600;
 }
 
+.review-card,
+.constellation-card {
+  margin-top: 1.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 1.25rem;
+  background: white;
+  padding: 1.25rem;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.review-card {
+  display: grid;
+  gap: 1rem;
+  text-align: center;
+}
+
+.review-object {
+  display: grid;
+  min-height: 7rem;
+  place-items: center;
+  align-content: center;
+  gap: 0.25rem;
+  border-radius: 1rem;
+  background: radial-gradient(circle, #172033 0 2%, #0b0d12 3% 100%);
+  color: white;
+}
+
+.review-object span:last-child {
+  color: #cbd5e1;
+  font-size: 0.75rem;
+}
+
+.review-spark {
+  color: #ff9f68;
+  font-size: 2rem;
+}
+
+.review-action,
+.review-focus {
+  min-height: 48px;
+  border-radius: 999px;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.review-no {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.review-yes {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.review-focus {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.constellation-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.constellation-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  padding: 1rem;
+}
+
+.constellation-item h3 {
+  margin-top: 0.65rem;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.constellation-item > p:last-child {
+  margin-top: 0.25rem;
+  color: #64748b;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.constellation-pattern {
+  min-height: 2.5rem;
+  white-space: pre;
+  color: #2563eb;
+  font-size: 1.15rem;
+  letter-spacing: 0.2rem;
+}
+
+.simple-app.dark .review-card,
+.simple-app.dark .constellation-card,
+.simple-app.dark .constellation-item {
+  border-color: #334155;
+  background: #172033;
+}
+
+.simple-app.dark .constellation-item h3 {
+  color: #f8fafc;
+}
+
+.simple-app.dark .constellation-item > p:last-child {
+  color: #cbd5e1;
+}
+
 @media (max-width: 760px) {
   .simple-header {
     align-items: flex-start;
@@ -645,6 +755,10 @@ header button {
   .deck-layout {
     flex-direction: column;
     overflow-y: auto;
+  }
+
+  .constellation-grid {
+    grid-template-columns: 1fr;
   }
 
   .deck-scroll {
