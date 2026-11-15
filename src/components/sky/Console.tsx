@@ -444,18 +444,23 @@ function SimpleExplorer({
           <div className="flex flex-col justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:px-6">
             <div>
               <p className="text-sm font-semibold text-blue-600">STEP 2 OF 3</p>
-              <h2 className="mt-1 text-xl font-semibold text-slate-950">Look at the sky</h2>
-              <p className="mt-1 text-sm text-slate-600">Watch the picture. If one dot jumps, click it.</p>
+              <h2 className="mt-1 text-xl font-semibold text-slate-950">Watch two pictures</h2>
+              <p className="mt-1 text-sm text-slate-600">Stars stay still. The orange ring shows what moved.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" className={`simple-choice ${compare === "blink" ? "simple-choice-active" : ""}`} onClick={() => setCompare("blink")}>Blink</button>
               <button type="button" className={`simple-choice ${compare === "split" ? "simple-choice-active" : ""}`} onClick={() => setCompare("split")}>Side by side</button>
-              <button type="button" className={`simple-play ${playing ? "simple-play-active" : ""}`} onClick={() => setPlaying(!playing)}>
-                {playing ? "Pause" : "Play"}
+              <button type="button" className={`simple-play ${playing ? "simple-play-active" : ""}`} onClick={() => setPlaying(!playing)} aria-label={playing ? "Pause the pictures" : "Play the pictures"}>
+                <Play className={`size-4 ${playing ? "fill-current" : ""}`} />
+                {playing ? "Playing" : "Press play"}
               </button>
             </div>
           </div>
           <div className="simple-canvas-wrap">
+            <div className="simple-canvas-guide" aria-hidden="true">
+              <span className="simple-canvas-guide-title">This is a picture of the sky</span>
+              <span>Watch the dots. Find the one with the orange ring.</span>
+            </div>
             <SkyCanvas
               a={{ header: expA.header, plane: expA.plane, label: `A · ${epochA.date}`, short: `A · ${epochA.date}` }}
               b={{ header: expB.header, plane: expB.plane, label: `B · ${epochB.date}`, short: `B · ${epochB.date}` }}
@@ -475,6 +480,10 @@ function SimpleExplorer({
             />
             {status === "error" && <p className="absolute inset-0 grid place-items-center bg-slate-950/90 p-8 text-center text-sm text-white">{error}</p>}
             {status !== "ready" && status !== "error" && <p className="absolute inset-0 grid place-items-center text-sm text-white">Loading a real sky picture…</p>}
+            <div className="simple-canvas-legend" aria-label="Picture legend">
+              <span><i className="legend-dot legend-star" /> Stars stay still</span>
+              <span><i className="legend-dot legend-mover" /> This one moves</span>
+            </div>
           </div>
         </section>
 
