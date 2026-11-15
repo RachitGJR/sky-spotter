@@ -475,23 +475,25 @@ function SimpleExplorer({
               <span className="simple-canvas-guide-title">This is a picture of the sky</span>
               <span>Watch the dots. Find the one with the orange ring.</span>
             </div>
-            <SkyCanvas
-              a={{ header: expA.header, plane: expA.plane, label: `A · ${epochA.date}`, short: `A · ${epochA.date}` }}
-              b={{ header: expB.header, plane: expB.plane, label: `B · ${epochB.date}`, short: `B · ${epochB.date}` }}
-              compare={compare}
-              view={view}
-              tone="ink"
-              epoch={epoch}
-              movers={movers}
-              selectedId={selectedId}
-              onSelect={onSelect}
-              aDate={epochA.date}
-              bDate={epochB.date}
-              onViewChange={setView}
-              onGeometry={onGeometry}
-              showGrid={false}
-              busy={status !== "ready"}
-            />
+            <div className="simple-sky-canvas">
+              <SkyCanvas
+                a={{ header: expA.header, plane: expA.plane, label: `A · ${epochA.date}`, short: `A · ${epochA.date}` }}
+                b={{ header: expB.header, plane: expB.plane, label: `B · ${epochB.date}`, short: `B · ${epochB.date}` }}
+                compare={compare}
+                view={view}
+                tone="ink"
+                epoch={epoch}
+                movers={movers}
+                selectedId={selectedId}
+                onSelect={onSelect}
+                aDate={epochA.date}
+                bDate={epochB.date}
+                onViewChange={setView}
+                onGeometry={onGeometry}
+                showGrid={false}
+                busy={status !== "ready"}
+              />
+            </div>
             {status === "error" && <p className="absolute inset-0 grid place-items-center bg-slate-950/90 p-8 text-center text-sm text-white">{error}</p>}
             {status !== "ready" && status !== "error" && <p className="absolute inset-0 grid place-items-center text-sm text-white">Loading a real sky picture…</p>}
             <div className="simple-canvas-legend" aria-label="Picture legend">
