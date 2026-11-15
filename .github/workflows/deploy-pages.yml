@@ -36,7 +36,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL }}
+          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL || 'https://adorable-lemming-695.convex.cloud' }}
           GITHUB_ACTIONS: true
 
       - name: Preserve SPA routes
