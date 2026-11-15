@@ -7,6 +7,7 @@ import { FIELDS, baselineDays, getField, type SurveyEpoch } from "@/lib/spherex/
 import { EXAMPLES, getExample, type Example } from "@/lib/spherex/examples";
 import { apparentMagnitude, motionOf, type Mover } from "@/lib/spherex/movers";
 import { SkyCanvas, type Compare, type Tone, type View } from "@/components/sky/SkyCanvas";
+import { MoverInset } from "@/components/sky/MoverInset";
 import {
   BAND_COUNT,
   BAND_WAVELENGTHS,
@@ -552,6 +553,25 @@ function SimpleExplorer({
                 busy={status !== "ready"}
               />
             </div>
+            {selected && (
+              <>
+                <div className="simple-detection-label">
+                  <span className="simple-detection-dot" />
+                  <span><strong>{selected.name}</strong><small>Automatic movement match</small></span>
+                </div>
+                <MoverInset
+                  a={expA}
+                  b={expB}
+                  mover={selected}
+                  epoch={epoch}
+                  tone="ink"
+                  aLabel="BEFORE"
+                  bLabel="AFTER"
+                  aDate={epochA.date}
+                  bDate={epochB.date}
+                />
+              </>
+            )}
             {status === "error" && <p className="absolute inset-0 grid place-items-center bg-slate-950/90 p-8 text-center text-sm text-white">{error}</p>}
             {status !== "ready" && status !== "error" && <p className="absolute inset-0 grid place-items-center text-sm text-white">Loading a real sky picture…</p>}
             <div className="simple-canvas-legend" aria-label="Picture legend">
