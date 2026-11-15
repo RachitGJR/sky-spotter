@@ -6,16 +6,16 @@
  * the most colourful thing on screen. */
 
 :root {
-  --deck-bg: #0a0a0a;
-  --deck-panel: #0d0d0d;
-  --deck-panel-2: #101010;
-  --deck-raised: #151515;
-  --deck-line: #1f1f1f;
-  --deck-line-soft: #171717;
-  --deck-text: #ededed;
-  --deck-muted: #8b8b8b;
-  --deck-dim: #585858;
-  --deck-accent: #c2703d;
+  --deck-bg: #0b0d12;
+  --deck-panel: #11141b;
+  --deck-panel-2: #171b24;
+  --deck-raised: #202532;
+  --deck-line: #303746;
+  --deck-line-soft: #242a36;
+  --deck-text: #f5f5f7;
+  --deck-muted: #c7c9d1;
+  --deck-dim: #9ca1ad;
+  --deck-accent: #ff9f68;
   --deck-ok: #6f8f7a;
   --deck-warn: #a8834f;
   --deck-bad: #a3555a;
@@ -35,6 +35,30 @@
 }
 .deck-scroll::-webkit-scrollbar-track {
   background: transparent;
+}
+
+.deck-scroll:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+input:focus-visible {
+  outline: 3px solid #7cc4ff;
+  outline-offset: 3px;
+}
+
+.deck-scroll button,
+.deck-scroll summary,
+header button {
+  min-height: 44px;
+}
+
+.deck-scroll summary {
+  margin: -4px;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.deck-scroll summary:hover {
+  background: var(--deck-raised);
 }
 
 .deck-hairline {
@@ -94,4 +118,33 @@
   border: 3px solid var(--deck-bg);
   background: var(--deck-text);
   box-shadow: 0 0 0 1px var(--deck-line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .deck-layout {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .deck-scroll {
+    width: 100% !important;
+    max-height: 42vh;
+    border-right: 0;
+    border-bottom: 1px solid var(--deck-line-soft);
+  }
+
+  .deck-layout > main {
+    min-height: 58vh;
+  }
 }

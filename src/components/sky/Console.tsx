@@ -45,6 +45,7 @@ import {
   Crosshair,
   Grid3x3,
   GraduationCap,
+  MoreHorizontal,
   Play,
   RotateCcw,
   Search,
@@ -58,10 +59,42 @@ import "./console.css";
  * Presentational pieces — flat, hairline, no fills but the active one
  * ------------------------------------------------------------------ */
 
-function Rail({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
+function Rail({
+  title,
+  children,
+  action,
+  collapsible = false,
+  defaultOpen = true,
+}: {
+  title: string;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+}) {
+  if (collapsible) {
+    return (
+      <details
+        className="border-b border-[var(--deck-line-soft)] px-4 py-4 group"
+        open={defaultOpen}
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+          <span className="flex min-w-0 items-center gap-2">
+            <ChevronRight className="size-3 shrink-0 text-[var(--deck-dim)] transition-transform group-open:rotate-90" />
+            <span className="truncate text-[10px] font-medium uppercase tracking-[0.2em] text-[var(--deck-dim)]">
+              {title}
+            </span>
+          </span>
+          {action}
+        </summary>
+        <div className="mt-3">{children}</div>
+      </details>
+    );
+  }
+
   return (
-    <section className="border-b border-[var(--deck-line-soft)] px-5 py-5">
-      <div className="mb-3.5 flex items-center justify-between">
+    <section className="border-b border-[var(--deck-line-soft)] px-4 py-4">
+      <div className="mb-3 flex items-center justify-between">
         <h2 className="text-[10px] font-medium uppercase tracking-[0.2em] text-[var(--deck-dim)]">
           {title}
         </h2>
@@ -580,17 +613,33 @@ export default function Console() {
             <Play className="mr-1.5 inline size-3.5" />
             Example
           </GhostButton>
-          <GhostButton onClick={() => setTourOpen(true)} title="Guided walkthrough">
-            <GraduationCap className="mr-1.5 inline size-3.5" />
-            Tour
-          </GhostButton>
-          <GhostButton onClick={intro.replay} title="Replay the introduction">
-            Intro
-          </GhostButton>
-          <GhostButton onClick={() => setGuideOpen(true)} title="Plain-English guide">
-            Guide
-          </GhostButton>
-          <GhostButton onClick={() => setExplainerOpen(true)}>Explainer</GhostButton>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex min-h-[34px] items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-[13px] text-[var(--deck-muted)] transition-colors hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
+                aria-label="Open learning tools"
+              >
+                <GraduationCap className="size-3.5" />
+                Learn
+                <MoreHorizontal className="size-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44 border-[var(--deck-line)] bg-[var(--deck-panel)] text-[var(--deck-text)]">
+              <DropdownMenuItem onClick={() => setTourOpen(true)} className="cursor-pointer text-[13px] focus:bg-[var(--deck-raised)] focus:text-[var(--deck-text)]">
+                Guided tour
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={intro.replay} className="cursor-pointer text-[13px] focus:bg-[var(--deck-raised)] focus:text-[var(--deck-text)]">
+                Replay intro
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setGuideOpen(true)} className="cursor-pointer text-[13px] focus:bg-[var(--deck-raised)] focus:text-[var(--deck-text)]">
+                Plain-English guide
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setExplainerOpen(true)} className="cursor-pointer text-[13px] focus:bg-[var(--deck-raised)] focus:text-[var(--deck-text)]">
+                Cosmic explainer
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <NeoWsInline />
           <DiscoveryLog entries={entries} onChange={updateDiscoveries} />
           <GhostButton
@@ -607,10 +656,10 @@ export default function Console() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="deck-layout flex min-h-0 flex-1">
         {/* ------------------------------------------------------ left rail */}
-        <aside className="deck-scroll w-[286px] shrink-0 overflow-y-auto border-r border-[var(--deck-line-soft)]" style={{ background: "var(--deck-panel)" }}>
-          <div className="px-5 py-5">
+        <aside className="deck-scroll w-[258px] shrink-0 overflow-y-auto border-r border-[var(--deck-line-soft)]" style={{ background: "var(--deck-panel)" }}>
+          <div className="px-4 py-4">
             <p className="text-[15px] leading-snug text-[var(--deck-text)]">
               Find what moves while the stars hold still.
             </p>
@@ -618,7 +667,7 @@ export default function Console() {
           </div>
 
           <Rail
-            title="Worked examples"
+            title="Try an example"
             action={
               activeExample ? (
                 <button
@@ -679,7 +728,7 @@ export default function Console() {
             </div>
           </Rail>
 
-          <Rail title="Which part of the sky">
+          <Rail title="Choose a place">
             <div className="mb-4 space-y-px overflow-hidden rounded-md border border-[var(--deck-line)]">
               {FIELDS.map((f) => (
                 <button
@@ -709,7 +758,7 @@ export default function Console() {
           </Rail>
 
           <Rail
-            title="Look at the two pictures"
+            title="Compare pictures"
             action={
               <span className="text-right text-[10px] text-[var(--deck-dim)]">
                 {COMPARE_MODES.find((m) => m.id === compare)?.hint}
@@ -745,7 +794,7 @@ export default function Console() {
           </Rail>
 
           <Rail
-            title="The pictures SPHEREx took"
+            title="Choose pictures"
             action={
               <span className="font-mono text-[10px] text-[var(--deck-dim)]">{baseline} days apart</span>
             }
@@ -831,7 +880,12 @@ export default function Console() {
             )}
           </Rail>
 
-          <Rail title="Blink speed" action={<span className="font-mono text-[10px] text-[var(--deck-dim)]">{(intervalMs / 1000).toFixed(2)}s / epoch</span>}>
+          <Rail
+            title="Animation speed"
+            action={<span className="font-mono text-[10px] text-[var(--deck-dim)]">{(intervalMs / 1000).toFixed(2)}s</span>}
+            collapsible
+            defaultOpen={false}
+          >
             <Option
               options={SPEEDS.map((s) => ({ id: String(s.ms), label: s.label }))}
               value={String(intervalMs)}
@@ -850,7 +904,7 @@ export default function Console() {
             />
           </Rail>
 
-          <Rail title="Display">
+          <Rail title="More display options" collapsible defaultOpen={false}>
             <div className="flex flex-wrap items-center gap-1.5">
               <Option
                 options={FILTERS.map((f) => ({ id: f.id, label: f.label }))}
@@ -869,7 +923,7 @@ export default function Console() {
             </div>
           </Rail>
 
-          <Rail title="Where this is">
+          <Rail title="Sky map" collapsible defaultOpen={false}>
             <AllSkyLocator ra={centre.ra} dec={centre.dec} />
           </Rail>
         </aside>
