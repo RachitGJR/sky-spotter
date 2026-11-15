@@ -317,6 +317,9 @@ function SimpleExplorer({
   updateDiscoveries,
   focusMover,
   baseline,
+  targetName,
+  coordinates,
+  onCoordinates,
 }: {
   field: ReturnType<typeof getField>;
   epochA: SurveyEpoch;
@@ -348,7 +351,35 @@ function SimpleExplorer({
   updateDiscoveries: (v: Discovery[]) => void;
   focusMover: (v: Mover) => void;
   baseline: number;
+  targetName: string;
+  coordinates: { ra: string; dec: string };
+  onCoordinates: (coordinates: { ra: string; dec: string }, name?: string) => void;
 }) {
+  const challengeTargets = [
+    { name: "Barnard's Star", ra: "17:57:48.50", dec: "+04:41:36.1" },
+    { name: "Epsilon Indi B", ra: "21:04:34.80", dec: "-56:46:50.0" },
+    { name: "WISE 0855", ra: "08:55:10.831", dec: "-07:14:42.53" },
+    { name: "RW Aurigae", ra: "05:07:49.57", dec: "+30:24:05.0" },
+    { name: "R Draconis", ra: "16:32:40.76", dec: "+66:45:36.7" },
+  ];
+
+  const parseAngle = (value: string, isRa: boolean) => {
+    const parts = value.trim().split(/[:\s]+/).map(Number);
+    if (parts.some(Number.isNaN)) return null;
+    if (parts.length === 1) return Number.isFinite(parts[0]) ? parts[0] * (isRa ? 15 : 1) : null;
+    const sign = !isRa && value.trim().startsWith("-") ? -1 : 1;
+    return sign * (Math.abs(parts[0]) + parts[1] / 60 + (parts[2] ?? 0) / 3600) * (isRa ? 15 : 1);
+  };
+
+  const submitCoordinates = (event: React.FormEvent) => {
+    event.preventDefault();
+    const ra = parseAngle(coordinates.ra, true);
+    const dec = parseAngle(coordinates.dec, false);
+    if (ra === null || dec === null || ra < 0 || ra >= 360 || dec < -90 || dec > 90) return;
+    onCoordinates(coordinates, targetName || "Custom sky position");
+    setView({ ...view, ra, dec });
+  };
+
   return (
     <div className="simple-app min-h-screen">
       <header className="simple-header">
@@ -370,30 +401,42 @@ function SimpleExplorer({
         <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
             <p className="text-sm font-semibold text-blue-600">STEP 1 OF 3</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">Choose a sky story</h1>
-            <p className="mt-2 max-w-xl text-slate-600">Pick one. We will show you two pictures and help you find what changed.</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">Choose a place in the sky</h1>
+            <p className="mt-2 max-w-xl text-slate-600">Try one of the challenge targets, or enter your own coordinates.</p>
           </div>
           <button type="button" className="simple-help-button" onClick={() => setGuideOpen(true)}>I need help</button>
         </div>
 
-        <div className="simple-story-row" aria-label="Choose a sky story">
-          {EXAMPLES.slice(0, 3).map((example) => {
-            const active = example.fieldId === field.id && epochA.date === getField(example.fieldId).epochs[example.a].date;
+        <form className="coordinate-box" onSubmit={submitCoordinates}>
+          <label htmlFor="ra-input">Right ascension</label>
+          <input id="ra-input" value={coordinates.ra} onChange={(event) => onCoordinates({ ...coordinates, ra: event.target.value })} placeholder="08:55:10.831" />
+          <label htmlFor="dec-input">Declination</label>
+          <input id="dec-input" value={coordinates.dec} onChange={(event) => onCoordinates({ ...coordinates, dec: event.target.value })} placeholder="-07:14:42.53" />
+          <button type="submit" className="simple-primary-small">Show this sky</button>
+        </form>
+
+        <div className="simple-story-row" aria-label="Challenge targets">
+          {challengeTargets.map((target) => {
+            const active = target.name === targetName;
             return (
               <button
                 type="button"
-                key={example.id}
-                onClick={() => runExample(example)}
+                key={target.name}
+                onClick={() => {
+                  onCoordinates({ ra: target.ra, dec: target.dec }, target.name);
+                  setView({ ...view, ra: parseAngle(target.ra, true) ?? view.ra, dec: parseAngle(target.dec, false) ?? view.dec });
+                }}
                 className={`simple-story-card ${active ? "simple-story-card-active" : ""}`}
               >
                 <span className="simple-story-icon" aria-hidden="true">✦</span>
-                <span className="block text-left text-base font-semibold text-slate-900">{getField(example.fieldId).members[0]?.label}</span>
-                <span className="mt-1 block text-left text-sm text-slate-600">{example.days} days apart · {example.why.split(".")[0]}.</span>
-                <span className="mt-3 block text-left text-sm font-semibold text-blue-700">{active ? "Showing this story" : "Show me →"}</span>
+                <span className="block text-left text-base font-semibold text-slate-900">{target.name}</span>
+                <span className="mt-1 block text-left font-mono text-xs text-slate-500">{target.ra} · {target.dec}</span>
+                <span className="mt-3 block text-left text-sm font-semibold text-blue-700">{active ? "Showing this target" : "Show me →"}</span>
               </button>
             );
           })}
         </div>
+        <p className="mt-3 text-xs text-slate-500">The viewer keeps the real SPHEREx image series loaded while you frame the location you want to inspect.</p>
 
         <section className="simple-viewer-card mt-6">
           <div className="flex flex-col justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:px-6">
@@ -541,6 +584,8 @@ function useExposure(epoch: SurveyEpoch | undefined) {
 export default function Console() {
   const [activeNav, setActiveNav] = useState<"explore" | "learn">("explore");
   const [simpleMode, setSimpleMode] = useState(true);
+  const [targetName, setTargetName] = useState("WISE 0855");
+  const [coordinates, setCoordinates] = useState({ ra: "08:55:10.831", dec: "-07:14:42.53" });
   const [showWelcome, setShowWelcome] = useState(() => {
     try {
       return localStorage.getItem("sky-spotter.started") !== "yes";
@@ -869,6 +914,12 @@ export default function Console() {
         updateDiscoveries={updateDiscoveries}
         focusMover={focusMover}
         baseline={baseline}
+        targetName={targetName}
+        coordinates={coordinates}
+        onCoordinates={(next, name) => {
+          setCoordinates(next);
+          if (name) setTargetName(name);
+        }}
       />
     );
   }

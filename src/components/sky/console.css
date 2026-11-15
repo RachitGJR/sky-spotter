@@ -319,6 +319,40 @@ header button {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.coordinate-box {
+  display: grid;
+  grid-template-columns: auto minmax(8rem, 12rem) auto minmax(8rem, 12rem) auto;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1.25rem;
+  border: 1px solid #dbe3ee;
+  border-radius: 1rem;
+  background: white;
+  padding: 0.75rem;
+}
+
+.coordinate-box label {
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.coordinate-box input {
+  min-height: 44px;
+  min-width: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.65rem;
+  padding: 0.6rem 0.75rem;
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.875rem;
+}
+
+.coordinate-box input:focus {
+  border-color: #2563eb;
+  outline: 3px solid #bfdbfe;
+}
+
 .simple-story-card {
   min-height: 11rem;
   border: 2px solid #e2e8f0;
@@ -430,6 +464,14 @@ header button {
 
   .simple-story-row {
     grid-template-columns: 1fr;
+  }
+
+  .coordinate-box {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .coordinate-box button {
+    grid-column: 1 / -1;
   }
 
   .simple-story-card {
