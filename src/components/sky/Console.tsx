@@ -213,6 +213,60 @@ function Readout({ rows }: { rows: [string, string][] }) {
   );
 }
 
+function WelcomePage({ onStart, onLearn }: { onStart: () => void; onLearn: () => void }) {
+  return (
+    <div className="welcome-page min-h-screen overflow-auto">
+      <header className="welcome-header">
+        <div className="flex items-center gap-3">
+          <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" aria-hidden="true" className="size-10 rounded-full" />
+          <div>
+            <p className="text-lg font-semibold tracking-tight">Sky Spotter</p>
+            <p className="text-sm text-slate-500">A friendly way to explore space</p>
+          </div>
+        </div>
+        <button type="button" className="welcome-link" onClick={onLearn}>
+          How does it work?
+        </button>
+      </header>
+
+      <main className="mx-auto flex w-full max-w-5xl flex-col items-center px-5 pb-16 pt-12 text-center sm:pt-20">
+        <div className="welcome-orbit" aria-hidden="true">
+          <span className="welcome-star star-one" />
+          <span className="welcome-star star-two" />
+          <span className="welcome-planet" />
+        </div>
+        <p className="welcome-eyebrow">LOOK UP. FIND SOMETHING MOVING.</p>
+        <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-6xl">
+          The sky is full of little surprises.
+        </h1>
+        <p className="mt-5 max-w-xl text-lg leading-relaxed text-slate-600 sm:text-xl">
+          Look at two real pictures of the night sky. Press play. Find the dot that moves.
+        </p>
+        <button type="button" className="welcome-primary mt-8" onClick={onStart}>
+          <Play className="size-5 fill-current" />
+          Start exploring
+        </button>
+        <p className="mt-3 text-sm text-slate-500">No account. No special knowledge. Just curiosity.</p>
+
+        <div className="mt-16 grid w-full max-w-4xl gap-4 text-left sm:grid-cols-3">
+          {[
+            { icon: "👀", title: "Look", body: "See a real picture from a space telescope." },
+            { icon: "▶", title: "Press play", body: "The pictures take turns, like a flip book." },
+            { icon: "✨", title: "Spot the mover", body: "One dot jumps. That is a world in space." },
+          ].map((step, index) => (
+            <div key={step.title} className="welcome-card">
+              <span className="welcome-card-number">{index + 1}</span>
+              <span className="text-3xl" aria-hidden="true">{step.icon}</span>
+              <h2 className="mt-4 text-lg font-semibold text-slate-900">{step.title}</h2>
+              <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{step.body}</p>
+            </div>
+          ))}
+        </div>
+      </main>
+    </div>
+  );
+}
+
 const SPEEDS = [
   { label: "Slow", ms: 1400 },
   { label: "Normal", ms: 950 },
@@ -299,6 +353,13 @@ function useExposure(epoch: SurveyEpoch | undefined) {
 
 export default function Console() {
   const [activeNav, setActiveNav] = useState<"explore" | "learn">("explore");
+  const [showWelcome, setShowWelcome] = useState(() => {
+    try {
+      return localStorage.getItem("sky-spotter.started") !== "yes";
+    } catch {
+      return true;
+    }
+  });
   const [fieldId, setFieldId] = useState(FIELDS[0].id);
   const field = useMemo(() => getField(fieldId), [fieldId]);
 
@@ -366,6 +427,16 @@ export default function Console() {
     setFollow(false);
     setDemoBeat(0);
   }, []);
+
+  const startExperience = useCallback(() => {
+    try {
+      localStorage.setItem("sky-spotter.started", "yes");
+    } catch {
+      // The app remains usable when browser storage is unavailable.
+    }
+    setShowWelcome(false);
+    runExample(EXAMPLES[0]);
+  }, [runExample]);
 
   // Frame the field whenever the citizen switches fields, and centre on the midpoint
   // of the two selected exposures so neither sits off the edge of the canvas.
@@ -564,6 +635,18 @@ export default function Console() {
   const magnitude = selected ? apparentMagnitude(selected, epoch === 0 ? 1 : 2) : null;
   const lambda = BAND_WAVELENGTHS[band];
 
+  if (showWelcome) {
+    return (
+      <WelcomePage
+        onStart={startExperience}
+        onLearn={() => {
+          setShowWelcome(false);
+          setGuideOpen(true);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex h-screen flex-col overflow-hidden text-[var(--deck-text)]" style={{ background: "var(--deck-bg)" }}>
       {/* ---------------------------------------------------------- top bar */}
@@ -582,6 +665,13 @@ export default function Console() {
             <span className="block text-[14px] font-semibold tracking-tight">Sky Spotter</span>
             <span className="block text-[11px] text-[var(--deck-dim)]">Find worlds that move</span>
           </div>
+          <button
+            type="button"
+            className="ml-2 hidden rounded-lg px-2.5 py-2 text-[12px] text-[var(--deck-muted)] hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)] sm:block"
+            onClick={() => setShowWelcome(true)}
+          >
+            Home
+          </button>
         </div>
 
         <nav className="ml-3 flex items-center gap-1" aria-label="Main navigation">

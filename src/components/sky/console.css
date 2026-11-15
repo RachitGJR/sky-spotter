@@ -21,6 +21,122 @@
   --deck-bad: #a3555a;
 }
 
+.welcome-page {
+  background:
+    radial-gradient(circle at 50% 12%, rgba(111, 183, 255, 0.18), transparent 28rem),
+    #f7f9fc;
+  color: #0f172a;
+}
+
+.welcome-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid #e6ebf2;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 1rem max(1.25rem, calc((100vw - 72rem) / 2));
+  backdrop-filter: blur(16px);
+}
+
+.welcome-link {
+  min-height: 44px;
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  color: #475569;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.welcome-link:hover {
+  background: #eaf2ff;
+  color: #1d4ed8;
+}
+
+.welcome-eyebrow {
+  color: #2563eb;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.welcome-primary {
+  display: inline-flex;
+  min-height: 56px;
+  align-items: center;
+  gap: 0.65rem;
+  border-radius: 999px;
+  background: #2563eb;
+  padding: 0.9rem 1.5rem;
+  color: white;
+  font-size: 1rem;
+  font-weight: 700;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.22);
+  transition: transform 120ms ease, background 120ms ease;
+}
+
+.welcome-primary:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.welcome-card {
+  position: relative;
+  min-height: 12rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 1.5rem;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.welcome-card-number {
+  position: absolute;
+  right: 1rem;
+  top: 1rem;
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  border-radius: 999px;
+  background: #eaf2ff;
+  color: #2563eb;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.welcome-orbit {
+  position: relative;
+  height: 7rem;
+  width: 7rem;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  border-radius: 999px;
+  transform: rotate(-18deg);
+}
+
+.welcome-planet {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #6ea8fe, #2563eb);
+  box-shadow: 0 0 0 0.75rem rgba(37, 99, 235, 0.08), 0 8px 20px rgba(37, 99, 235, 0.25);
+  transform: translate(-50%, -50%);
+}
+
+.welcome-star {
+  position: absolute;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: #f59e0b;
+}
+
+.star-one { right: 0.25rem; top: 1.25rem; }
+.star-two { bottom: 0.7rem; left: 1rem; background: #38bdf8; }
+
 .deck-scroll {
   scrollbar-width: thin;
   scrollbar-color: var(--deck-line) transparent;
