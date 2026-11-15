@@ -298,6 +298,7 @@ function useExposure(epoch: SurveyEpoch | undefined) {
  * ------------------------------------------------------------------ */
 
 export default function Console() {
+  const [activeNav, setActiveNav] = useState<"explore" | "learn">("explore");
   const [fieldId, setFieldId] = useState(FIELDS[0].id);
   const field = useMemo(() => getField(fieldId), [fieldId]);
 
@@ -566,16 +567,47 @@ export default function Console() {
   return (
     <div className="flex h-screen flex-col overflow-hidden text-[var(--deck-text)]" style={{ background: "var(--deck-bg)" }}>
       {/* ---------------------------------------------------------- top bar */}
-      <header className="flex min-w-0 shrink-0 flex-wrap items-center gap-3 overflow-hidden border-b border-[var(--deck-line-soft)] px-5 py-2.5">
-        <div className="flex shrink-0 items-baseline gap-2.5">
+      <a href="#sky-view" className="deck-skip-link">
+        Skip to sky view
+      </a>
+      <header className="flex min-w-0 shrink-0 flex-wrap items-center gap-3 overflow-hidden border-b border-[var(--deck-line-soft)] px-5 py-3">
+        <div className="flex shrink-0 items-center gap-2.5">
         <img
           src={`${import.meta.env.BASE_URL}logo.png`}
-          alt="SPHEREx logo"
-          className="size-6 rounded-full object-cover"
+          alt=""
+          aria-hidden="true"
+          className="size-8 rounded-full object-cover"
         />
-          <span className="text-[12px] font-semibold uppercase tracking-[0.22em]">SPHEREx</span>
-          <span className="text-[12px] text-[var(--deck-dim)]">Blink Comparator</span>
+          <div>
+            <span className="block text-[14px] font-semibold tracking-tight">Sky Spotter</span>
+            <span className="block text-[11px] text-[var(--deck-dim)]">Find worlds that move</span>
+          </div>
         </div>
+
+        <nav className="ml-3 flex items-center gap-1" aria-label="Main navigation">
+          <button
+            type="button"
+            onClick={() => setActiveNav("explore")}
+            aria-current={activeNav === "explore" ? "page" : undefined}
+            className={`rounded-lg px-3 py-2 text-[13px] transition-colors ${
+              activeNav === "explore"
+                ? "bg-[var(--deck-raised)] text-[var(--deck-text)]"
+                : "text-[var(--deck-muted)] hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
+            }`}
+          >
+            Explore
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveNav("learn");
+              setGuideOpen(true);
+            }}
+            className="rounded-lg px-3 py-2 text-[13px] text-[var(--deck-muted)] transition-colors hover:bg-[var(--deck-raised)] hover:text-[var(--deck-text)]"
+          >
+            How it works
+          </button>
+        </nav>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -660,10 +692,32 @@ export default function Console() {
         {/* ------------------------------------------------------ left rail */}
         <aside className="deck-scroll w-[258px] shrink-0 overflow-y-auto border-r border-[var(--deck-line-soft)]" style={{ background: "var(--deck-panel)" }}>
           <div className="px-4 py-4">
-            <p className="text-[15px] leading-snug text-[var(--deck-text)]">
-              Find what moves while the stars hold still.
+            <p className="text-[18px] font-medium leading-snug text-[var(--deck-text)]">
+              Start here
             </p>
-            <p className="mt-2.5 text-[12px] leading-relaxed text-[var(--deck-dim)]">{field.blurb}</p>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-[var(--deck-muted)]">
+              Find a moving object in three simple steps.
+            </p>
+            <ol className="mt-4 space-y-3" aria-label="How to use Sky Spotter">
+              {[
+                ["1", "Choose a place", "Pick a patch of sky."],
+                ["2", "Choose two pictures", "Use the dates already selected."],
+                ["3", "Press play", "A moving object will jump."],
+              ].map(([number, title, body]) => (
+                <li key={number} className="flex gap-2.5">
+                  <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[var(--deck-accent)] text-[11px] font-semibold text-[var(--deck-bg)]">
+                    {number}
+                  </span>
+                  <span>
+                    <strong className="block text-[12px] font-medium text-[var(--deck-text)]">{title}</strong>
+                    <span className="block text-[11px] text-[var(--deck-dim)]">{body}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-4 border-t border-[var(--deck-line-soft)] pt-3 text-[11px] leading-relaxed text-[var(--deck-dim)]">
+              {field.blurb}
+            </p>
           </div>
 
           <Rail
@@ -929,7 +983,7 @@ export default function Console() {
         </aside>
 
         {/* --------------------------------------------------------- canvas */}
-        <main className="relative min-w-0 flex-1">
+        <main id="sky-view" className="relative min-w-0 flex-1" aria-label="Interactive sky view">
           <SkyCanvas
             a={{
               header: expA.header,

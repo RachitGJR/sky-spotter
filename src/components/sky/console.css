@@ -45,6 +45,24 @@ input:focus-visible {
   outline-offset: 3px;
 }
 
+.deck-skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -4rem;
+  z-index: 100;
+  border-radius: 0.6rem;
+  background: #f5f5f7;
+  color: #0b0d12;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: top 120ms ease;
+}
+
+.deck-skip-link:focus {
+  top: 1rem;
+}
+
 .deck-scroll button,
 .deck-scroll summary,
 header button {
@@ -146,5 +164,13 @@ header button {
 
   .deck-layout > main {
     min-height: 58vh;
+  }
+
+  header nav {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+    border-top: 1px solid var(--deck-line-soft);
+    padding-top: 0.5rem;
   }
 }
